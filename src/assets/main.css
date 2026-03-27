@@ -1,0 +1,17 @@
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  color: #1f2b3d;
+}
+
+a {
+  color: inherit;
+}
