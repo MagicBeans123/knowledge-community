@@ -1,45 +1,51 @@
-﻿<template>
+<template>
   <section class="user-page" v-if="profileReady">
     <div class="hero card">
       <img class="avatar" :src="profile.icon || defaultIcon" alt="avatar" />
       <div class="hero-info">
-        <h2>{{ profile.nickName || "No nickname" }}</h2>
-        <p>Phone: {{ profile.phone || "--" }}</p>
-        <p>Address: {{ profile.address || "Not set" }}</p>
+        <h2>{{ profile.nickName || "未设置昵称" }}</h2>
+        <p>账号：{{ profile.phone || "--" }}</p>
+        <p>城市：{{ profile.city || "未设置" }}</p>
       </div>
       <div class="hero-actions">
-        <span class="gender-tag">{{ profile.gender || "Not set" }}</span>
-        <el-button type="primary" @click="goEdit">Edit Profile</el-button>
+        <span class="gender-tag">{{ genderLabel(profile.gender) }}</span>
+        <el-button type="primary" @click="goEdit">修改资料</el-button>
       </div>
     </div>
 
     <div class="grid">
       <div class="card block">
-        <h3>Overview</h3>
+        <h3>个人概览</h3>
         <div class="metrics">
           <div class="metric-item">
-            <strong>{{ profile.followeeCount || 0 }}</strong>
-            <span>Following</span>
+            <strong>{{ profile.followee ?? 0 }}</strong>
+            <span>关注</span>
           </div>
           <div class="metric-item">
-            <strong>{{ profile.fansCount || 0 }}</strong>
-            <span>Followers</span>
+            <strong>{{ profile.fans ?? 0 }}</strong>
+            <span>粉丝</span>
           </div>
           <div class="metric-item">
-            <strong>{{ profile.blogCount || 0 }}</strong>
-            <span>Posts</span>
+            <strong>{{ profile.blogCount ?? 0 }}</strong>
+            <span>博客</span>
           </div>
         </div>
-        <p class="bio">{{ profile.introduce || "No bio yet." }}</p>
+        <p class="sub-metrics">
+          积分 {{ profile.credits ?? 0 }} · 等级 {{ profile.level ?? 0 }}
+        </p>
+        <p class="bio">{{ profile.introduce || "这个人很低调，还没有写个人简介。" }}</p>
       </div>
 
       <div class="card block">
-        <h3>Profile Details</h3>
+        <h3>个人信息</h3>
         <ul class="info-list">
-          <li><span>Nickname</span><b>{{ profile.nickName || "--" }}</b></li>
-          <li><span>Phone</span><b>{{ profile.phone || "--" }}</b></li>
-          <li><span>Gender</span><b>{{ profile.gender || "--" }}</b></li>
-          <li><span>Address</span><b>{{ profile.address || "--" }}</b></li>
+          <li><span>昵称</span><b>{{ profile.nickName || "--" }}</b></li>
+          <li><span>手机号</span><b>{{ profile.phone || "--" }}</b></li>
+          <li><span>邮箱</span><b>{{ profile.email || "--" }}</b></li>
+          <li><span>性别</span><b>{{ genderLabel(profile.gender) }}</b></li>
+          <li><span>城市</span><b>{{ profile.city || "--" }}</b></li>
+          <li><span>生日</span><b>{{ profile.birthday || "--" }}</b></li>
+          <li><span>个性签名</span><b>{{ profile.sign || "--" }}</b></li>
         </ul>
       </div>
     </div>
@@ -51,6 +57,7 @@ import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { useUserStore } from "../stores/user";
+import { genderLabel } from "../utils/dto";
 
 defineProps({
   keyword: {
@@ -65,19 +72,7 @@ const router = useRouter();
 const defaultIcon = "/imgs/icons/default-icon.png";
 const profileReady = ref(false);
 
-const profile = computed(() => {
-  const base = userStore.user || {};
-  const extRaw = localStorage.getItem("kc_profile_ext");
-  let ext = {};
-  if (extRaw) {
-    try {
-      ext = JSON.parse(extRaw);
-    } catch (error) {
-      ext = {};
-    }
-  }
-  return { ...base, ...ext };
-});
+const profile = computed(() => userStore.user || {});
 
 const goEdit = () => {
   router.push("/community/info-edit");
@@ -88,7 +83,7 @@ onMounted(async () => {
     await userStore.fetchMe();
     profileReady.value = true;
   } catch (error) {
-    ElMessage.error("Failed to load user profile");
+    ElMessage.error("加载用户信息失败");
   }
 });
 </script>
@@ -179,6 +174,12 @@ onMounted(async () => {
 .metric-item span {
   color: #6e7a93;
   font-size: 13px;
+}
+
+.sub-metrics {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: #6e7a93;
 }
 
 .bio {

@@ -1,7 +1,7 @@
-import { createRouter, createWebHistory } from "vue-router";
+﻿import { createRouter, createWebHistory } from "vue-router";
 import AppDesktopLayout from "../layouts/AppDesktopLayout.vue";
 import LandingPage from "../views/LandingPage.vue";
-import HomePage from "../views/HomePage.vue";
+import ExplorePage from "../views/ExplorePage.vue";
 import BlogDetailPage from "../views/BlogDetailPage.vue";
 import BlogEditPage from "../views/BlogEditPage.vue";
 import UserInfoPage from "../views/UserInfoPage.vue";
@@ -16,7 +16,8 @@ const routes = [
     path: "/community",
     component: AppDesktopLayout,
     children: [
-      { path: "", name: "home", component: HomePage },
+      { path: "", redirect: "/community/explore" },
+      { path: "explore", name: "explore", component: ExplorePage },
       { path: "blog/:id", name: "blog-detail", component: BlogDetailPage, props: true },
       { path: "blog-edit", name: "blog-edit", component: BlogEditPage },
       { path: "info", name: "info", component: UserInfoPage },

@@ -2,9 +2,15 @@
   <section class="card user-page" v-if="user">
     <div class="profile">
       <img :src="user.icon || defaultIcon" alt="avatar" />
-      <div>
-        <h2>{{ user.nickName }}</h2>
-        <p>ID：{{ user.id }}</p>
+      <div class="profile-main">
+        <h2>{{ user.nickName || "用户" }}</h2>
+        <p class="uid">用户 ID：{{ user.id }}</p>
+        <p v-if="user.city" class="muted">城市：{{ user.city }}</p>
+        <p v-if="user.introduce" class="intro">{{ user.introduce }}</p>
+        <div class="counts">
+          <span>关注 {{ user.followee ?? 0 }}</span>
+          <span>粉丝 {{ user.fans ?? 0 }}</span>
+        </div>
       </div>
       <el-button type="primary" plain @click="toggleFollow">{{ followText }}</el-button>
     </div>
@@ -16,6 +22,7 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
 import http from "../api/http";
+import { normalizePublicUser } from "../utils/dto";
 
 const props = defineProps({
   id: {
@@ -39,14 +46,22 @@ const targetId = props.id || route.params.id;
 const followText = computed(() => (followed.value ? "取消关注" : "关注"));
 
 const fetchUser = async () => {
-  user.value = await http.get(`/user/${targetId}`);
-  followed.value = await http.get(`/follow/or/not/${targetId}`);
+  const raw = await http.get(`/user/${targetId}`);
+  user.value = normalizePublicUser(raw);
+  const flag = await http.get(`/follow/or/not/${targetId}`);
+  followed.value = Boolean(flag);
 };
 
 const toggleFollow = async () => {
   await http.put(`/follow/${targetId}/${!followed.value}`);
   followed.value = !followed.value;
   ElMessage.success(followed.value ? "关注成功" : "已取消关注");
+  try {
+    const raw = await http.get(`/user/${targetId}`);
+    user.value = normalizePublicUser(raw);
+  } catch (error) {
+    /* ignore refresh failure */
+  }
 };
 
 onMounted(async () => {
@@ -71,7 +86,7 @@ onMounted(async () => {
 
 .profile {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 14px;
 }
 
@@ -81,12 +96,38 @@ onMounted(async () => {
   border-radius: 50%;
 }
 
+.profile-main {
+  flex: 1;
+  min-width: 0;
+}
+
 h2 {
   margin: 0 0 4px;
 }
 
-p {
-  margin: 0;
+.uid {
+  margin: 0 0 6px;
   color: #75829a;
+  font-size: 14px;
+}
+
+.muted {
+  margin: 0 0 8px;
+  color: #75829a;
+  font-size: 14px;
+}
+
+.intro {
+  margin: 0 0 10px;
+  line-height: 1.6;
+  color: #4a5568;
+  font-size: 14px;
+}
+
+.counts {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: #6b7c93;
 }
 </style>

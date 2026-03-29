@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <header class="top-nav">
     <div class="brand" @click="toHome">Knowledge Community</div>
     <el-input

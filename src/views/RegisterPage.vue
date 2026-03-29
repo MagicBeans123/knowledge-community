@@ -44,6 +44,7 @@
 import { reactive } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
+import http from "../api/http";
 
 const router = useRouter();
 const phoneRegex = /^1\d{10}$/;
@@ -108,7 +109,7 @@ const checkConfirm = () => {
   }
 };
 
-const submitRegister = () => {
+const submitRegister = async () => {
   checkNickName();
   checkPhone();
   checkPassword();
@@ -125,8 +126,17 @@ const submitRegister = () => {
     return;
   }
 
-  ElMessage.success("注册成功，请前往登录");
-  router.push("/login");
+  try {
+    await http.post("/user/register", {
+      nickName: form.nickName.trim(),
+      phone: form.phone.trim(),
+      password: form.password
+    });
+    ElMessage.success("注册成功，请前往登录");
+    router.push("/login");
+  } catch (error) {
+    ElMessage.error(error.message || "注册失败");
+  }
 };
 
 const goLogin = () => {

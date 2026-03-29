@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import http from "../api/http";
+import { normalizeCurrentUser } from "../utils/dto";
 
 export const useUserStore = defineStore("user", {
   state: () => ({
@@ -8,7 +9,8 @@ export const useUserStore = defineStore("user", {
   actions: {
     async fetchMe() {
       try {
-        this.user = await http.get("/user/me");
+        const data = await http.get("/user/me");
+        this.user = normalizeCurrentUser(data);
       } catch (error) {
         this.user = null;
       }

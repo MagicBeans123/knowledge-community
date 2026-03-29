@@ -1,31 +1,53 @@
-# Knowledge Community (Vue3)
+﻿# Knowledge Community
 
-基于 `vue.mdc` 约束实现：
+Knowledge Community is a desktop-oriented knowledge sharing frontend built with Vue 3.
+It focuses on content exploration, blog creation, and profile management.
 
-- Vue 3 + SFC（每个组件独立 `.vue` 文件）
-- Composition API
-- Pinia（用户全局状态）
-- Vue Router（业务页面路由）
-- Element Plus（桌面端 UI）
+## Tech Stack
 
-## 业务页面映射（仿 hmdp）
+- Vue 3 (Composition API)
+- Vue Router 4
+- Pinia
+- Element Plus
+- Axios
+- Vite
 
-- `/` -> 首页（`index.html`）
-- `/blog/:id` -> 博客详情（`blog-detail.html`）
-- `/blog-edit` -> 发布博客（`blog-edit.html`）
-- `/shop-list` -> 店铺列表（`shop-list.html`）
-- `/shop/:id` -> 店铺详情（`shop-detail.html`）
-- `/info` -> 我的信息（`info.html`）
-- `/other-info/:id` -> 他人信息（`other-info.html`）
-- `/info-edit` -> 编辑信息（`info-edit.html`）
-- `/login` -> 手机验证码登录（`login.html`）
-- `/login2` -> 账号密码登录（`login2.html`）
+## Features
 
-## 运行
+- Landing page with login/register entry
+- Explore page with recommended blogs
+- Blog detail page
+- Blog editor with Markdown + image insertion + live preview
+- User center homepage
+- User profile edit page (avatar, password, address, gender, bio)
+- Login and register with client-side validation
+
+## Routes
+
+- `/` : Landing page
+- `/login` : Login
+- `/register` : Register
+- `/community/explore` : Explore
+- `/community/blog/:id` : Blog detail
+- `/community/blog-edit` : Blog editor
+- `/community/info` : User center
+- `/community/info-edit` : User profile edit
+- `/community/other-info/:id` : Other user profile
+
+## Development
 
 ```bash
 npm install
 npm run dev
 ```
 
-默认开发端口：`5173`
+Default dev URL: `http://localhost:5173`
+
+## Build
+
+```bash
+npm run build
+npm run preview
+```
+
+Build output is in `dist/`, which can be deployed via Nginx.
