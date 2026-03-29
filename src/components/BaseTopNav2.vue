@@ -4,6 +4,7 @@
     <el-input
       v-model="searchText"
       class="search"
+      clearable
       placeholder="搜索文章、作者、标签"
       @keyup.enter="emitSearch"
     >
@@ -12,9 +13,9 @@
       </template>
     </el-input>
     <div class="actions">
-      <el-button @click="toExplore">知识探索</el-button>
-      <el-button @click="toInfo">个人中心</el-button>
-      <el-button type="primary" @click="toPublish">发布帖子</el-button>
+      <el-button class="nav-btn" @click="toExplore">知识探索</el-button>
+      <el-button class="nav-btn" @click="toInfo">个人中心</el-button>
+      <el-button type="primary" class="nav-primary" @click="toPublish">发布帖子</el-button>
     </div>
   </header>
 </template>
@@ -45,23 +46,56 @@ const toPublish = () => router.push("/community/blog-edit");
   align-items: center;
   gap: 16px;
   padding: 0 24px;
-  background: linear-gradient(90deg, #ff6a3d, #ff8b4f);
+  background: var(--kc-card);
+  border-bottom: 1px solid var(--kc-border);
+  box-shadow: var(--kc-shadow-soft);
 }
 
 .brand {
-  min-width: 260px;
-  color: #fff;
+  min-width: 220px;
+  color: var(--kc-text);
   font-weight: 700;
-  font-size: 22px;
+  font-size: 20px;
+  font-family: Georgia, "Times New Roman", serif;
+  letter-spacing: 0.02em;
   cursor: pointer;
 }
 
 .search {
   flex: 1;
+  max-width: 560px;
+}
+
+.search :deep(.el-input__wrapper) {
+  background: var(--kc-card-elevated);
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px var(--kc-border-soft);
+}
+
+.search :deep(.el-input__wrapper:hover),
+.search :deep(.el-input__wrapper.is-focus) {
+  box-shadow: inset 0 0 0 1px var(--kc-border);
 }
 
 .actions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.nav-btn {
+  background: transparent;
+  border: 1px solid var(--kc-border-soft);
+  color: var(--kc-text);
+}
+
+.nav-btn:hover {
+  border-color: var(--kc-border);
+  background: rgba(255, 253, 247, 0.8);
+  color: var(--kc-text);
+}
+
+.nav-primary {
+  font-weight: 600;
 }
 </style>

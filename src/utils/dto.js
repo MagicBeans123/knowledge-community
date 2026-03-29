@@ -7,11 +7,20 @@
  */
 
 const IMG_SRC_RE = /<img[^>]+src=["']([^"']+)["']/i;
+const MD_IMG_RE = /!\[[^\]]*\]\(\s*([^)\s]+)\s*\)/;
 
 export function firstImageSrcFromHtml(html) {
   if (!html || typeof html !== "string") return "";
   const m = html.match(IMG_SRC_RE);
   return m ? m[1] : "";
+}
+
+/** 从正文提取首张图：支持 Markdown ![](url) 与 HTML <img> */
+export function firstImageFromBlogContent(content) {
+  if (!content || typeof content !== "string") return "";
+  const mdMatch = content.match(MD_IMG_RE);
+  if (mdMatch) return mdMatch[1].trim();
+  return firstImageSrcFromHtml(content);
 }
 
 export function normalizeBlogCard(raw) {
@@ -20,7 +29,7 @@ export function normalizeBlogCard(raw) {
   const cover =
     r.cover ||
     (r.images && String(r.images).split(",")[0].trim()) ||
-    firstImageSrcFromHtml(r.content) ||
+    firstImageFromBlogContent(r.content) ||
     "";
   return {
     ...r,

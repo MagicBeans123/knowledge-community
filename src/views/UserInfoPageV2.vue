@@ -95,9 +95,10 @@ onMounted(async () => {
 }
 
 .card {
-  background: #fff;
+  background: var(--kc-card);
+  border: 1px solid var(--kc-border);
   border-radius: 14px;
-  box-shadow: 0 8px 22px rgba(30, 45, 80, 0.08);
+  box-shadow: var(--kc-shadow-soft);
 }
 
 .hero {
@@ -118,11 +119,13 @@ onMounted(async () => {
 .hero-info h2 {
   margin: 0 0 8px;
   font-size: 28px;
+  font-family: Georgia, "Times New Roman", serif;
+  color: var(--kc-text);
 }
 
 .hero-info p {
   margin: 0 0 4px;
-  color: #6e7a93;
+  color: var(--kc-muted);
 }
 
 .hero-actions {
@@ -134,8 +137,9 @@ onMounted(async () => {
 .gender-tag {
   padding: 4px 10px;
   border-radius: 999px;
-  background: #f3f6fb;
-  color: #4f5d7a;
+  background: var(--kc-card-elevated);
+  border: 1px solid var(--kc-border-soft);
+  color: var(--kc-muted);
   font-size: 12px;
 }
 
@@ -160,7 +164,8 @@ onMounted(async () => {
 }
 
 .metric-item {
-  background: #f5f8fe;
+  background: var(--kc-card-elevated);
+  border: 1px solid var(--kc-border-soft);
   border-radius: 10px;
   padding: 12px;
   text-align: center;
@@ -172,19 +177,19 @@ onMounted(async () => {
 }
 
 .metric-item span {
-  color: #6e7a93;
+  color: var(--kc-muted);
   font-size: 13px;
 }
 
 .sub-metrics {
   margin: 12px 0 0;
   font-size: 13px;
-  color: #6e7a93;
+  color: var(--kc-muted);
 }
 
 .bio {
   margin: 14px 0 0;
-  color: #5e6c89;
+  color: var(--kc-muted);
   line-height: 1.75;
 }
 
@@ -199,12 +204,12 @@ onMounted(async () => {
 .info-list li {
   display: flex;
   justify-content: space-between;
-  border-bottom: 1px solid #eff3fa;
+  border-bottom: 1px solid var(--kc-border-soft);
   padding-bottom: 8px;
 }
 
 .info-list span {
-  color: #6e7a93;
+  color: var(--kc-muted);
 }
 
 @media (max-width: 960px) {

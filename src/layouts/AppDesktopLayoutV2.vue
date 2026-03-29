@@ -22,12 +22,12 @@ const onSearchSubmit = (value) => {
 <style scoped>
 .page-shell {
   min-height: 100vh;
-  background: #f4f7fc;
+  background: var(--kc-page-bg);
 }
 
 .main-wrap {
-  width: min(1440px, 96vw);
-  margin: 18px auto 0;
-  padding-bottom: 20px;
+  width: min(1320px, 96vw);
+  margin: 20px auto 0;
+  padding-bottom: 32px;
 }
 </style>

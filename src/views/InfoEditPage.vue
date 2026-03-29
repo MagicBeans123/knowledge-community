@@ -134,9 +134,12 @@ onMounted(async () => {
 
 <style scoped>
 .card {
-  background: #fff;
+  background: var(--kc-card);
+  border: 1px solid var(--kc-border);
   border-radius: 14px;
-  box-shadow: 0 8px 22px rgba(30, 45, 80, 0.08);
+  box-shadow: var(--kc-shadow-soft);
+  max-width: 900px;
+  margin: 0 auto;
 }
 
 .form-wrap {
@@ -152,6 +155,8 @@ onMounted(async () => {
 
 h2 {
   margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  color: var(--kc-text);
 }
 
 .form-grid {

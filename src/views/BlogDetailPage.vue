@@ -1,58 +1,85 @@
 <template>
-  <section class="card detail-wrap" v-if="blog">
-    <div class="head">
-      <el-button text @click="router.back()">返回</el-button>
-      <div class="title">{{ blog.title }}</div>
-      <el-button type="primary" @click="toggleLike">点赞 {{ blog.liked ?? 0 }}</el-button>
-    </div>
-    <div class="author">
-      <img :src="blog.icon || defaultIcon" alt="avatar" />
-      <router-link v-if="blog.userId" class="author-name" :to="`/community/other-info/${blog.userId}`">
-        {{ blog.nickName || "匿名用户" }}
-      </router-link>
-      <span v-else>{{ blog.nickName || "匿名用户" }}</span>
-      <em>{{ formatDate(blog.createTime) }}</em>
-      <span class="stat" v-if="blog.comments != null">评论 {{ blog.comments }}</span>
-    </div>
-    <div class="content" v-html="blog.content"></div>
+  <div class="detail-page">
+    <section v-if="loadError" class="card panel error-panel">
+      <p class="error-title">无法加载这篇博客</p>
+      <p class="error-desc">{{ loadError }}</p>
+      <el-button type="primary" @click="router.push('/community/explore')">返回探索</el-button>
+    </section>
 
-    <div class="comments card-inner">
-      <h3>评论</h3>
-      <div class="comment-form">
-        <el-input
-          v-model="commentDraft"
-          type="textarea"
-          :rows="3"
-          maxlength="255"
-          show-word-limit
-          placeholder="写下你的想法（最多 255 字）"
-        />
-        <el-button type="primary" class="send-btn" :loading="commentSubmitting" @click="submitComment">发表评论</el-button>
-      </div>
-      <ul class="comment-list" v-if="comments.length">
-        <li v-for="c in comments" :key="c.id">
-          <img :src="c.icon || defaultIcon" alt="" class="c-avatar" />
-          <div class="c-body">
-            <div class="c-meta">
-              <b>{{ c.nickName || "用户" }}</b>
-              <span>{{ formatDate(c.createTime) }}</span>
-              <button type="button" class="like-mini" @click="toggleCommentLike(c)">赞 {{ c.liked ?? 0 }}</button>
-            </div>
-            <p class="c-text">{{ c.content }}</p>
+    <template v-else>
+      <section v-if="!blog && loading" class="card panel skeleton-panel">
+        <el-skeleton animated :rows="6" />
+      </section>
+
+      <section class="card panel" v-else-if="blog">
+        <div class="head">
+          <el-button class="back-btn" text @click="router.back()">← 返回</el-button>
+          <h1 class="title">{{ blog.title }}</h1>
+          <el-button type="primary" class="like-main" :loading="likeLoading" @click="toggleLike">
+            点赞 {{ blog.liked ?? 0 }}
+          </el-button>
+        </div>
+
+        <div class="author-row">
+          <img class="avatar" :src="blog.icon || defaultIcon" alt="" />
+          <div class="author-text">
+            <router-link v-if="blog.userId" class="author-name" :to="`/community/other-info/${blog.userId}`">
+              {{ blog.nickName || "匿名用户" }}
+            </router-link>
+            <span v-else class="author-name plain">{{ blog.nickName || "匿名用户" }}</span>
+            <span class="meta-line">
+              <time>{{ formatDate(blog.createTime) }}</time>
+              <span v-if="blog.comments != null" class="dot">·</span>
+              <span v-if="blog.comments != null">评论 {{ blog.comments }}</span>
+            </span>
           </div>
-        </li>
-      </ul>
-      <p v-else class="empty-c">暂无评论，来抢沙发吧</p>
-    </div>
-  </section>
+        </div>
+
+        <article class="article-body markdown-body" v-html="articleHtml"></article>
+
+        <div class="comments-block">
+          <h2 class="comments-title">评论</h2>
+          <div v-if="commentsError" class="comments-hint">{{ commentsError }}</div>
+          <div class="comment-form">
+            <el-input
+              v-model="commentDraft"
+              type="textarea"
+              :rows="3"
+              maxlength="255"
+              show-word-limit
+              placeholder="写下你的想法（最多 255 字）"
+            />
+            <el-button type="primary" class="send-btn" :loading="commentSubmitting" @click="submitComment">
+              发表评论
+            </el-button>
+          </div>
+          <ul class="comment-list" v-if="comments.length">
+            <li v-for="c in comments" :key="c.id">
+              <img :src="c.icon || defaultIcon" alt="" class="c-avatar" />
+              <div class="c-body">
+                <div class="c-meta">
+                  <b>{{ c.nickName || "用户" }}</b>
+                  <span class="c-time">{{ formatDate(c.createTime) }}</span>
+                  <button type="button" class="like-mini" @click="toggleCommentLike(c)">赞 {{ c.liked ?? 0 }}</button>
+                </div>
+                <p class="c-text">{{ c.content }}</p>
+              </div>
+            </li>
+          </ul>
+          <p v-else-if="!commentsError" class="empty-c">暂无评论，来抢沙发吧</p>
+        </div>
+      </section>
+    </template>
+  </div>
 </template>
 
 <script setup>
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import http from "../api/http";
 import { normalizeBlogDetail, normalizeComment } from "../utils/dto";
+import { isLikelyHtmlContent, renderMarkdown } from "../utils/markdown";
 
 const props = defineProps({
   id: {
@@ -73,25 +100,45 @@ const blog = ref(null);
 const comments = ref([]);
 const commentDraft = ref("");
 const commentSubmitting = ref(false);
+const loading = ref(true);
+const loadError = ref("");
+const commentsError = ref("");
+const likeLoading = ref(false);
 const defaultIcon = "/imgs/icons/default-icon.png";
 
 const blogId = props.id || route.params.id;
 
+const articleHtml = computed(() => {
+  const c = blog.value?.content;
+  if (!c || typeof c !== "string") return "";
+  return isLikelyHtmlContent(c) ? c : renderMarkdown(c);
+});
+
 const formatDate = (timestamp) => {
   if (!timestamp) return "";
   const date = new Date(timestamp);
-  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 };
 
 const fetchBlog = async () => {
   const raw = await http.get(`/blog/${blogId}`);
-  blog.value = normalizeBlogDetail(raw);
+  const normalized = normalizeBlogDetail(raw);
+  if (!normalized) {
+    throw new Error("未找到该博客");
+  }
+  blog.value = normalized;
 };
 
 const fetchComments = async () => {
-  const data = await http.get(`/blog/${blogId}/comments`);
-  const list = Array.isArray(data) ? data : [];
-  comments.value = list.map((item) => normalizeComment(item));
+  commentsError.value = "";
+  try {
+    const data = await http.get(`/blog/${blogId}/comments`);
+    const list = Array.isArray(data) ? data : [];
+    comments.value = list.map((item) => normalizeComment(item));
+  } catch (error) {
+    commentsError.value = error.message || "评论暂时无法加载，正文仍可阅读";
+    comments.value = [];
+  }
 };
 
 const submitComment = async () => {
@@ -128,99 +175,262 @@ const toggleCommentLike = async (row) => {
 };
 
 const toggleLike = async () => {
-  await http.put(`/blog/like/${blogId}`);
-  await fetchBlog();
+  likeLoading.value = true;
+  try {
+    await http.put(`/blog/like/${blogId}`);
+    await fetchBlog();
+  } catch (error) {
+    ElMessage.error(error.message);
+  } finally {
+    likeLoading.value = false;
+  }
 };
 
 onMounted(async () => {
+  loadError.value = "";
+  loading.value = true;
   try {
     await fetchBlog();
     await fetchComments();
   } catch (error) {
-    ElMessage.error(error.message);
+    loadError.value = error.message || "请检查网络或稍后重试";
+  } finally {
+    loading.value = false;
   }
 });
 </script>
 
 <style scoped>
-.card {
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(28, 45, 80, 0.08);
+.detail-page {
+  max-width: 860px;
+  margin: 0 auto;
 }
 
-.detail-wrap {
-  padding: 24px;
+.panel {
+  background: var(--kc-card);
+  border: 1px solid var(--kc-border);
+  border-radius: 14px;
+  box-shadow: var(--kc-shadow);
 }
 
-.head {
-  display: grid;
-  grid-template-columns: 80px 1fr auto;
-  align-items: center;
-}
-
-.title {
-  font-size: 28px;
-  font-weight: 700;
+.error-panel {
+  padding: 32px;
   text-align: center;
 }
 
-.author {
-  margin-top: 16px;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  color: #6f7b91;
+.error-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--kc-text);
 }
 
-.author img {
-  width: 32px;
-  height: 32px;
+.error-desc {
+  margin: 0 0 20px;
+  color: var(--kc-muted);
+  font-size: 14px;
+}
+
+.skeleton-panel {
+  padding: 28px;
+}
+
+.panel:not(.skeleton-panel):not(.error-panel) {
+  padding: 28px 32px 36px;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px 16px;
+  margin-bottom: 8px;
+}
+
+.back-btn {
+  color: var(--kc-muted);
+  padding-left: 0;
+}
+
+.title {
+  flex: 1 1 220px;
+  margin: 0;
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 700;
+  font-family: Georgia, "Times New Roman", serif;
+  line-height: 1.35;
+  color: var(--kc-text);
+  text-align: left;
+}
+
+.like-main {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.author-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 16px 0 20px;
+  border-bottom: 1px solid var(--kc-border-soft);
+}
+
+.avatar {
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--kc-border-soft);
+}
+
+.author-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 
 .author-name {
-  color: #2d6cdf;
+  color: var(--el-color-primary);
   text-decoration: none;
   font-weight: 600;
+  font-size: 15px;
+}
+
+.author-name.plain {
+  color: var(--kc-text);
 }
 
 .author-name:hover {
   text-decoration: underline;
 }
 
-.author em {
-  font-style: normal;
-  margin-left: 8px;
-}
-
-.author .stat {
-  margin-left: 12px;
+.meta-line {
   font-size: 13px;
-  color: #8b95a8;
+  color: var(--kc-muted);
 }
 
-.content {
+.meta-line .dot {
+  margin: 0 6px;
+}
+
+.article-body {
   margin-top: 24px;
-  line-height: 1.9;
-  font-size: 15px;
+  line-height: 1.85;
+  font-size: 16px;
+  color: var(--kc-text);
+  word-break: break-word;
 }
 
-.card-inner {
-  margin-top: 28px;
-  padding-top: 20px;
-  border-top: 1px solid #eef1f6;
+.article-body :deep(p) {
+  margin: 0 0 12px;
 }
 
-.card-inner h3 {
-  margin: 0 0 14px;
-  font-size: 18px;
+.article-body :deep(h1),
+.article-body :deep(h2),
+.article-body :deep(h3) {
+  margin: 1.1em 0 0.5em;
+  line-height: 1.25;
+  color: var(--kc-text);
+}
+
+.article-body :deep(h1) {
+  font-size: 1.5rem;
+}
+
+.article-body :deep(h2) {
+  font-size: 1.25rem;
+}
+
+.article-body :deep(h3) {
+  font-size: 1.1rem;
+}
+
+.article-body :deep(ul),
+.article-body :deep(ol) {
+  margin: 0 0 12px;
+  padding-left: 1.4em;
+}
+
+.article-body :deep(blockquote) {
+  margin: 0 0 12px;
+  padding: 8px 14px;
+  border-left: 4px solid var(--kc-border);
+  background: rgba(77, 92, 66, 0.06);
+  color: var(--kc-muted);
+}
+
+.article-body :deep(pre) {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #2d3423;
+  color: #f3f0e9;
+  overflow: auto;
+  font-size: 13px;
+}
+
+.article-body :deep(code) {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.article-body :deep(pre code) {
+  color: inherit;
+  background: none;
+}
+
+.article-body :deep(p code),
+.article-body :deep(li code) {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(77, 92, 66, 0.1);
+}
+
+.article-body :deep(img) {
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+  display: block;
+  margin: 12px 0;
+}
+
+.article-body :deep(a) {
+  color: var(--el-color-primary);
+}
+
+.comments-block {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--kc-border-soft);
+}
+
+.comments-title {
+  margin: 0 0 16px;
+  font-size: 20px;
+  font-family: Georgia, "Times New Roman", serif;
+  color: var(--kc-text);
+}
+
+.comments-hint {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(77, 92, 66, 0.08);
+  color: var(--kc-muted);
+  font-size: 13px;
 }
 
 .comment-form {
   display: grid;
-  gap: 10px;
-  margin-bottom: 20px;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.comment-form :deep(.el-textarea__inner) {
+  background: var(--kc-card-elevated);
+  border-radius: 10px;
 }
 
 .send-btn {
@@ -232,13 +442,17 @@ onMounted(async () => {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 14px;
+  gap: 16px;
 }
 
 .comment-list li {
   display: flex;
   gap: 12px;
   align-items: flex-start;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--kc-card-elevated);
+  border: 1px solid var(--kc-border-soft);
 }
 
 .c-avatar {
@@ -246,6 +460,7 @@ onMounted(async () => {
   height: 40px;
   border-radius: 50%;
   object-fit: cover;
+  border: 1px solid var(--kc-border-soft);
 }
 
 .c-body {
@@ -257,33 +472,59 @@ onMounted(async () => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 8px 12px;
   font-size: 13px;
-  color: #6f7b91;
+  color: var(--kc-muted);
 }
 
 .c-meta b {
-  color: #1f2d3d;
+  color: var(--kc-text);
+}
+
+.c-time {
+  opacity: 0.9;
 }
 
 .like-mini {
   border: none;
   background: transparent;
-  color: #d55555;
+  color: var(--el-color-primary);
   cursor: pointer;
   font-size: 13px;
   padding: 0;
+  margin-left: auto;
 }
 
 .c-text {
-  margin: 6px 0 0;
-  line-height: 1.6;
-  color: #2c3e50;
+  margin: 8px 0 0;
+  line-height: 1.65;
+  color: var(--kc-text);
+  font-size: 14px;
 }
 
 .empty-c {
   margin: 0;
-  color: #8b95a8;
+  color: var(--kc-muted);
   font-size: 14px;
+}
+
+@media (max-width: 640px) {
+  .panel:not(.skeleton-panel):not(.error-panel) {
+    padding: 20px 18px 28px;
+  }
+
+  .like-main {
+    margin-left: 0;
+  }
+
+  .head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .title {
+    order: -1;
+    width: 100%;
+  }
 }
 </style>

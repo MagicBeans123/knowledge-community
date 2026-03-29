@@ -1,5 +1,18 @@
 :root {
   color-scheme: light;
+  /* 与登录 / 注册页一致的暖色体系 */
+  --kc-page-bg: radial-gradient(circle at top, #f6e2c7, #f3f0e9 55%);
+  --kc-card: #f7f3e8;
+  --kc-card-elevated: #fffdf7;
+  --kc-border: #d8d1c1;
+  --kc-border-soft: #ddd2ba;
+  --kc-text: #2d3423;
+  --kc-muted: #656753;
+  --kc-subtle: #7a7d6a;
+  --kc-shadow: 0 10px 28px rgba(58, 67, 44, 0.14);
+  --kc-shadow-soft: 0 6px 20px rgba(58, 67, 44, 0.1);
+  /* 主色：橄榄绿灰，与米色背景协调（替代顶栏亮橙） */
+  --el-color-primary: #4d5c42;
 }
 
 * {
@@ -9,7 +22,7 @@
 body {
   margin: 0;
   font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
-  color: #1f2b3d;
+  color: var(--kc-text);
 }
 
 a {

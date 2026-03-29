@@ -21,7 +21,19 @@
 
       <div class="blog-grid" @scroll="onScroll">
         <article class="blog-card" v-for="blogItem in filteredBlogs" :key="blogItem.id">
-          <img class="cover" :src="blogItem.cover" :alt="blogItem.title" @click="goBlogDetail(blogItem.id)" />
+          <div class="cover-wrap" @click="goBlogDetail(blogItem.id)">
+            <img
+              v-if="blogItem.cover && !blogItem.coverError"
+              class="cover"
+              :src="blogItem.cover"
+              :alt="blogItem.title"
+              loading="lazy"
+              @error="blogItem.coverError = true"
+            />
+            <div v-else class="cover cover--placeholder" aria-hidden="true">
+              <span class="ph-icon">文</span>
+            </div>
+          </div>
           <div class="content">
             <h4 @click="goBlogDetail(blogItem.id)">{{ blogItem.title }}</h4>
             <div class="reason">{{ recommendReason(blogItem) }}</div>
@@ -40,7 +52,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import http from "../api/http";
@@ -94,10 +106,14 @@ const recommendReason = (blogItem) => {
 };
 
 const toggleLike = async (blogItem) => {
-  await http.put(`/blog/like/${blogItem.id}`);
-  const latest = await http.get(`/blog/${blogItem.id}`);
-  blogItem.liked = latest.liked;
-  blogItem.isLike = latest.isLike;
+  try {
+    await http.put(`/blog/like/${blogItem.id}`);
+    const latest = await http.get(`/blog/${blogItem.id}`);
+    blogItem.liked = latest.liked;
+    blogItem.isLike = latest.isLike;
+  } catch (error) {
+    ElMessage.error(error.message || "操作失败");
+  }
 };
 
 const goBlogDetail = (blogId) => {
@@ -117,13 +133,6 @@ const onScroll = async (event) => {
   }
 };
 
-watch(
-  () => props.keyword,
-  (value) => {
-    if (value.trim()) ElMessage.success("已按关键词筛选");
-  }
-);
-
 onMounted(async () => {
   try {
     await fetchBlogs();
@@ -136,128 +145,180 @@ onMounted(async () => {
 <style scoped>
 .explore-page {
   display: grid;
-  gap: 16px;
+  gap: 18px;
 }
 
 .card {
-  background: #f7f3e8;
-  border: 1px solid #d8d1c1;
+  background: var(--kc-card);
+  border: 1px solid var(--kc-border);
   border-radius: 14px;
-  box-shadow: 0 10px 28px rgba(58, 67, 44, 0.14);
+  box-shadow: var(--kc-shadow);
 }
 
 .hero {
-  padding: 20px 24px;
+  padding: 22px 26px;
   display: flex;
   justify-content: space-between;
   gap: 20px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .eyebrow {
   margin: 0;
-  color: #6a758f;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--kc-subtle);
 }
 
 h2 {
   margin: 8px 0;
-  font-size: 34px;
+  font-size: 32px;
+  font-family: Georgia, "Times New Roman", serif;
+  color: var(--kc-text);
 }
 
 .desc {
   margin: 0;
-  color: #6a758f;
+  max-width: 520px;
+  line-height: 1.65;
+  color: var(--kc-muted);
 }
 
 .hero-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   max-width: 420px;
+  justify-content: flex-end;
 }
 
 .hero-tags span {
-  border: 1px solid #dfe5f0;
+  border: 1px solid var(--kc-border-soft);
   border-radius: 999px;
   padding: 6px 12px;
   font-size: 13px;
-  color: #45526f;
+  color: var(--kc-muted);
+  background: var(--kc-card-elevated);
 }
 
 .list-wrap {
-  padding: 16px;
+  padding: 20px 20px 24px;
 }
 
 .list-head h3 {
   margin: 0;
-  font-size: 24px;
+  font-size: 22px;
+  font-family: Georgia, "Times New Roman", serif;
+  color: var(--kc-text);
 }
 
 .list-head p {
   margin: 6px 0 0;
-  color: #6a758f;
+  color: var(--kc-muted);
+  font-size: 14px;
 }
 
 .blog-grid {
-  margin-top: 14px;
-  height: calc(100vh - 285px);
-  overflow: auto;
+  margin-top: 16px;
+  max-height: min(68vh, 820px);
+  overflow-y: auto;
+  padding-right: 4px;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
 }
 
 .blog-card {
-  border: 1px solid #ddd2ba;
-  border-radius: 10px;
+  border: 1px solid var(--kc-border-soft);
+  border-radius: 12px;
   overflow: hidden;
-  background: #fffdf7;
+  background: var(--kc-card-elevated);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.blog-card:hover {
+  box-shadow: var(--kc-shadow-soft);
+  transform: translateY(-2px);
+}
+
+.cover-wrap {
+  cursor: pointer;
+  background: #ebe4d6;
 }
 
 .cover {
+  display: block;
   width: 100%;
-  height: 180px;
+  height: 176px;
   object-fit: cover;
-  cursor: pointer;
+}
+
+.cover--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(145deg, #e8dfd0, #d4c9b8);
+  color: var(--kc-muted);
+}
+
+.ph-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  border: 1px solid rgba(45, 52, 35, 0.12);
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  font-family: Georgia, serif;
+  color: var(--kc-text);
+  opacity: 0.55;
 }
 
 .content {
-  padding: 12px;
+  padding: 14px 14px 16px;
 }
 
 h4 {
   margin: 0;
-  line-height: 1.4;
+  line-height: 1.45;
   cursor: pointer;
   min-height: 44px;
+  font-size: 16px;
+  color: var(--kc-text);
 }
 
 .reason {
   margin-top: 8px;
   font-size: 12px;
-  color: #6d705f;
-  background: #f2ecde;
+  color: var(--kc-muted);
+  background: rgba(77, 92, 66, 0.08);
   border-radius: 8px;
-  padding: 6px 8px;
+  padding: 8px 10px;
+  line-height: 1.5;
 }
 
 .meta {
-  margin-top: 10px;
+  margin-top: 12px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
 }
 
 .author {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .author img {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
+  border: 1px solid var(--kc-border-soft);
 }
 
 .author span {
@@ -266,12 +327,30 @@ h4 {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
+  color: var(--kc-text);
 }
 
 .like-btn {
-  border: none;
-  background: transparent;
-  color: #d55555;
+  flex-shrink: 0;
+  border: 1px solid var(--kc-border-soft);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 13px;
+  background: var(--kc-card);
+  color: var(--kc-text);
   cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.like-btn:hover {
+  background: rgba(77, 92, 66, 0.12);
+  border-color: var(--kc-border);
+}
+
+@media (max-width: 640px) {
+  .blog-grid {
+    max-height: none;
+    overflow: visible;
+  }
 }
 </style>

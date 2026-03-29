@@ -2,32 +2,56 @@
   <section class="editor-wrap">
     <div class="editor-card">
       <h2>发布帖子</h2>
-      <p class="sub">像 Word 一样编辑：可直接粘贴图片、插入图片、插入关联博客链接</p>
+      <p class="sub">Markdown 语法请自行书写。下方会根据正文<strong>实时渲染</strong>预览（含图片）。仅提供图片上传、文件上传；接口就绪后会自动填入地址。</p>
 
       <el-form label-width="90px" class="form-area">
         <el-form-item label="标题">
-          <el-input v-model="form.title" maxlength="80" placeholder="请输入帖子标题" />
+          <el-input v-model="form.title" maxlength="255" show-word-limit placeholder="请输入帖子标题" />
         </el-form-item>
 
-        <el-form-item label="编辑内容">
-          <div class="toolbar">
-            <el-button size="small" @click="triggerImagePicker">插入图片</el-button>
-            <el-button size="small" @click="insertRelatedBlogLink">插入博客链接</el-button>
-            <span class="tip">支持 Ctrl+V 粘贴图片</span>
+        <el-form-item label="正文" class="full-width-item">
+          <div class="actions-row">
+            <el-button size="small" :loading="imageUploading" @click="pickImage">上传图片</el-button>
+            <el-button size="small" :loading="fileUploading" @click="pickFile">上传文件</el-button>
+            <span class="tip">{{ contentLength }} / {{ maxContentLength }} 字</span>
+          </div>
+          <textarea
+            ref="textareaRef"
+            v-model="form.markdown"
+            class="md-input"
+            spellcheck="false"
+            placeholder="在此编写 Markdown…"
+          ></textarea>
+
+          <div class="preview-wrap">
+            <div class="preview-label">预览</div>
+            <div class="md-preview markdown-body" v-html="previewHtml"></div>
           </div>
 
-          <div
-            ref="editorRef"
-            class="editor-area"
-            contenteditable="true"
-            @input="syncEditorContent"
-            @paste="handlePaste"
-          ></div>
-          <input ref="fileInputRef" class="hidden-input" type="file" accept="image/*" @change="handleFileInsert" />
+          <input
+            ref="imageInputRef"
+            class="hidden-input"
+            type="file"
+            accept="image/*"
+            @change="onImageSelected"
+          />
+          <input ref="fileInputRef" class="hidden-input" type="file" @change="onFileSelected" />
+        </el-form-item>
+
+        <el-form-item label="文件列表" class="full-width-item">
+          <div class="uploaded-panel">
+            <p v-if="!uploadedFiles.length" class="uploaded-empty">暂无。上传文件后在此显示名称与链接（不会自动写入正文）。</p>
+            <ul v-else class="uploaded-list">
+              <li v-for="(f, i) in uploadedFiles" :key="i">
+                <span class="fname">{{ f.name }}</span>
+                <code class="furl">{{ f.url }}</code>
+              </li>
+            </ul>
+          </div>
         </el-form-item>
 
         <el-form-item>
-          <el-button type="primary" @click="submitPost">立即发布</el-button>
+          <el-button type="primary" :loading="submitting" @click="submitPost">立即发布</el-button>
         </el-form-item>
       </el-form>
     </div>
@@ -35,9 +59,10 @@
 </template>
 
 <script setup>
-import { reactive, ref } from "vue";
-import { ElMessage, ElMessageBox } from "element-plus";
+import { computed, nextTick, reactive, ref } from "vue";
+import { ElMessage } from "element-plus";
 import http from "../api/http";
+import { renderMarkdown } from "../utils/markdown";
 
 defineProps({
   keyword: {
@@ -47,82 +72,102 @@ defineProps({
   }
 });
 
+const maxContentLength = 2048;
+
 const form = reactive({
   title: "",
-  contentHtml: ""
+  markdown: ""
 });
-const editorRef = ref(null);
+
+const textareaRef = ref(null);
+const imageInputRef = ref(null);
 const fileInputRef = ref(null);
+const submitting = ref(false);
+const imageUploading = ref(false);
+const fileUploading = ref(false);
 
-const syncEditorContent = () => {
-  form.contentHtml = editorRef.value?.innerHTML || "";
-};
+const uploadedFiles = ref([]);
 
-const insertHtmlAtCursor = (html) => {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0) {
-    editorRef.value?.focus();
-  }
-  const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
-  if (!range) return;
-  range.deleteContents();
-  const temp = document.createElement("div");
-  temp.innerHTML = html;
-  const fragment = document.createDocumentFragment();
-  let node;
-  let lastNode;
-  while ((node = temp.firstChild)) {
-    lastNode = fragment.appendChild(node);
-  }
-  range.insertNode(fragment);
-  if (lastNode) {
-    range.setStartAfter(lastNode);
-    range.setEndAfter(lastNode);
-    selection.removeAllRanges();
-    selection.addRange(range);
-  }
-  syncEditorContent();
-};
+const previewHtml = computed(() => renderMarkdown(form.markdown));
+const contentLength = computed(() => form.markdown.length);
 
-const readFileToDataUrl = (file) =>
-  new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.readAsDataURL(file);
+function unwrapUploadUrl(data) {
+  if (typeof data === "string") return data.trim();
+  if (data && typeof data === "object") {
+    const u = data.url ?? data.path ?? data.src ?? data.data;
+    if (typeof u === "string") return u.trim();
+  }
+  return "";
+}
+
+const pickImage = () => imageInputRef.value?.click();
+const pickFile = () => fileInputRef.value?.click();
+
+function insertAtCursor(snippet) {
+  const el = textareaRef.value;
+  if (!el) {
+    form.markdown += snippet;
+    return;
+  }
+  const start = el.selectionStart ?? form.markdown.length;
+  const end = el.selectionEnd ?? form.markdown.length;
+  const before = form.markdown.slice(0, start);
+  const after = form.markdown.slice(end);
+  form.markdown = before + snippet + after;
+  const caret = start + snippet.length;
+  nextTick(() => {
+    el.focus();
+    el.setSelectionRange(caret, caret);
   });
+}
 
-const triggerImagePicker = () => {
-  fileInputRef.value?.click();
-};
-
-const handleFileInsert = async (event) => {
-  const file = event.target.files?.[0];
+const onImageSelected = async (event) => {
+  const input = event.target;
+  const file = input.files?.[0];
+  input.value = "";
   if (!file) return;
-  const dataUrl = await readFileToDataUrl(file);
-  insertHtmlAtCursor(`<p><img src="${dataUrl}" alt="${file.name}" style="max-width:100%;border-radius:8px;" /></p>`);
-  event.target.value = "";
-};
 
-const handlePaste = async (event) => {
-  const items = Array.from(event.clipboardData?.items || []);
-  const imageItem = items.find((item) => item.type.startsWith("image/"));
-  if (!imageItem) return;
-  event.preventDefault();
-  const file = imageItem.getAsFile();
-  if (!file) return;
-  const dataUrl = await readFileToDataUrl(file);
-  insertHtmlAtCursor(`<p><img src="${dataUrl}" alt="paste-image" style="max-width:100%;border-radius:8px;" /></p>`);
-};
-
-const insertRelatedBlogLink = async () => {
+  imageUploading.value = true;
   try {
-    const { value } = await ElMessageBox.prompt("请输入要关联的博客ID", "插入博客链接", {
-      inputPattern: /^\d+$/,
-      inputErrorMessage: "博客ID必须是数字"
-    });
-    insertHtmlAtCursor(`<p><a href="/community/blog/${value}" target="_blank">查看关联博客 #${value}</a></p>`);
-  } catch (error) {
-    // user cancelled
+    const fd = new FormData();
+    fd.append("file", file);
+    const data = await http.post("/blog/upload", fd);
+    const url = unwrapUploadUrl(data);
+    if (!url) {
+      ElMessage.warning("接口未返回图片地址。后端完成后应返回 URL 或 { url }。");
+      return;
+    }
+    insertAtCursor(`\n\n![图片](${url})\n\n`);
+    ElMessage.success("已插入图片");
+  } catch (e) {
+    ElMessage.error(e.message || "图片上传失败（后端未完成时可先在正文手写 ![](地址)）");
+  } finally {
+    imageUploading.value = false;
+  }
+};
+
+const onFileSelected = async (event) => {
+  const input = event.target;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+
+  fileUploading.value = true;
+  try {
+    const fd = new FormData();
+    fd.append("file", file);
+    const data = await http.post("/blog/file/upload", fd);
+    const url = unwrapUploadUrl(data);
+    if (!url) {
+      ElMessage.warning("接口未返回文件地址。后端完成后应返回 URL 或 { url }。");
+      return;
+    }
+    uploadedFiles.value = [...uploadedFiles.value, { name: file.name, url }];
+    ElMessage.success("文件已记录到底部列表");
+  } catch (e) {
+    ElMessage.error(e.message || "文件上传失败（后端未完成时可稍后再试）");
+  } finally {
+    fileUploading.value = false;
   }
 };
 
@@ -131,80 +176,259 @@ const submitPost = async () => {
     ElMessage.warning("标题不能为空");
     return;
   }
-  const contentHtml = (editorRef.value?.innerHTML || "").trim();
-  const pureText = (editorRef.value?.innerText || "").trim();
-  if (!pureText && !contentHtml.includes("<img")) {
+  const body = form.markdown.trim();
+  if (!body) {
     ElMessage.warning("正文不能为空");
     return;
   }
+  if (body.length > maxContentLength) {
+    ElMessage.warning(`正文过长，请控制在 ${maxContentLength} 字以内`);
+    return;
+  }
 
-  await http.post("/blog", {
-    title: form.title.trim(),
-    content: contentHtml
-  });
-
-  ElMessage.success("发布成功");
-  form.title = "";
-  form.contentHtml = "";
-  if (editorRef.value) {
-    editorRef.value.innerHTML = "";
+  submitting.value = true;
+  try {
+    await http.post("/blog", {
+      title: form.title.trim(),
+      content: body
+    });
+    ElMessage.success("发布成功");
+    form.title = "";
+    form.markdown = "";
+    uploadedFiles.value = [];
+  } catch (error) {
+    ElMessage.error(error.message || "发布失败");
+  } finally {
+    submitting.value = false;
   }
 };
 </script>
 
 <style scoped>
 .editor-wrap {
-  padding: 6px 0;
+  padding: 8px 0 24px;
+  width: 100%;
+  max-width: min(1280px, 98vw);
+  margin: 0 auto;
 }
 
 .editor-card {
   width: 100%;
-  background: #f7f3e8;
-  border: 1px solid #d8d1c1;
+  background: var(--kc-card);
+  border: 1px solid var(--kc-border);
   border-radius: 14px;
-  padding: 28px;
-  box-shadow: 0 10px 28px rgba(58, 67, 44, 0.14);
+  padding: 28px 32px 36px;
+  box-shadow: var(--kc-shadow);
 }
 
 h2 {
   margin: 0;
   font-size: 34px;
   font-family: Georgia, "Times New Roman", serif;
-  color: #2d3423;
+  color: var(--kc-text);
 }
 
 .sub {
-  margin: 10px 0 0;
-  color: #656753;
+  margin: 12px 0 0;
+  color: var(--kc-muted);
+  line-height: 1.75;
+  max-width: 900px;
 }
 
 .form-area {
-  margin-top: 22px;
+  margin-top: 24px;
 }
 
-.toolbar {
+.form-area :deep(.el-form-item__label) {
+  color: var(--kc-text);
+}
+
+.full-width-item :deep(.el-form-item__content) {
+  display: block;
+  width: 100%;
+}
+
+.actions-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   margin-bottom: 10px;
 }
 
 .tip {
-  color: #7a7d6a;
+  margin-left: auto;
+  color: var(--kc-subtle);
   font-size: 12px;
 }
 
-.editor-area {
-  min-height: 320px;
-  background: #fff;
-  border: 1px solid #ddd2ba;
-  border-radius: 10px;
-  padding: 12px;
+.md-input {
+  display: block;
+  width: 100%;
+  min-height: min(42vh, 480px);
+  padding: 16px 18px;
+  border: 1px solid var(--kc-border-soft);
+  border-radius: 12px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 15px;
   line-height: 1.7;
+  color: var(--kc-text);
+  background: var(--kc-card-elevated);
+  resize: vertical;
   outline: none;
+  box-sizing: border-box;
+}
+
+.md-input:focus {
+  border-color: var(--kc-border);
+  box-shadow: 0 0 0 1px rgba(77, 92, 66, 0.2);
+}
+
+.preview-wrap {
+  margin-top: 14px;
+  border: 1px solid var(--kc-border-soft);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255, 253, 247, 0.7);
+}
+
+.preview-label {
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--kc-muted);
+  background: rgba(77, 92, 66, 0.06);
+  border-bottom: 1px solid var(--kc-border-soft);
+}
+
+.md-preview {
+  min-height: 200px;
+  max-height: min(40vh, 440px);
+  overflow: auto;
+  padding: 16px 18px 20px;
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--kc-text);
+}
+
+.md-preview :deep(img) {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  display: block;
+  margin: 12px 0;
+}
+
+.md-preview :deep(p) {
+  margin: 0 0 12px;
+}
+
+.md-preview :deep(h1),
+.md-preview :deep(h2),
+.md-preview :deep(h3) {
+  margin: 1em 0 0.45em;
+  line-height: 1.25;
+  color: var(--kc-text);
+}
+
+.md-preview :deep(ul),
+.md-preview :deep(ol) {
+  margin: 0 0 12px;
+  padding-left: 1.4em;
+}
+
+.md-preview :deep(blockquote) {
+  margin: 0 0 12px;
+  padding: 8px 14px;
+  border-left: 4px solid var(--kc-border);
+  background: rgba(77, 92, 66, 0.06);
+  color: var(--kc-muted);
+}
+
+.md-preview :deep(pre) {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #2d3423;
+  color: #f3f0e9;
+  overflow: auto;
+  font-size: 13px;
+}
+
+.md-preview :deep(code) {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.md-preview :deep(pre code) {
+  background: none;
+  color: inherit;
+}
+
+.md-preview :deep(p code),
+.md-preview :deep(li code) {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(77, 92, 66, 0.1);
+}
+
+.md-preview :deep(a) {
+  color: var(--el-color-primary);
+}
+
+.uploaded-panel {
+  width: 100%;
+  border: 1px dashed var(--kc-border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: var(--kc-card-elevated);
+}
+
+.uploaded-empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--kc-muted);
+}
+
+.uploaded-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.uploaded-list li {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(77, 92, 66, 0.05);
+  border: 1px solid var(--kc-border-soft);
+}
+
+.fname {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--kc-text);
+}
+
+.furl {
+  font-size: 12px;
+  word-break: break-all;
+  color: var(--kc-muted);
+  background: transparent;
 }
 
 .hidden-input {
   display: none;
+}
+
+@media (max-width: 768px) {
+  .tip {
+    margin-left: 0;
+    width: 100%;
+  }
 }
 </style>

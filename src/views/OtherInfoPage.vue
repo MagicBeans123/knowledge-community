@@ -75,9 +75,10 @@ onMounted(async () => {
 
 <style scoped>
 .card {
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(28, 45, 80, 0.08);
+  background: var(--kc-card);
+  border: 1px solid var(--kc-border);
+  border-radius: 14px;
+  box-shadow: var(--kc-shadow-soft);
 }
 
 .user-page {
@@ -103,24 +104,26 @@ onMounted(async () => {
 
 h2 {
   margin: 0 0 4px;
+  font-family: Georgia, "Times New Roman", serif;
+  color: var(--kc-text);
 }
 
 .uid {
   margin: 0 0 6px;
-  color: #75829a;
+  color: var(--kc-muted);
   font-size: 14px;
 }
 
 .muted {
   margin: 0 0 8px;
-  color: #75829a;
+  color: var(--kc-muted);
   font-size: 14px;
 }
 
 .intro {
   margin: 0 0 10px;
   line-height: 1.6;
-  color: #4a5568;
+  color: var(--kc-muted);
   font-size: 14px;
 }
 
@@ -128,6 +131,6 @@ h2 {
   display: flex;
   gap: 16px;
   font-size: 13px;
-  color: #6b7c93;
+  color: var(--kc-muted);
 }
 </style>
