@@ -1,28 +1,44 @@
 <template>
-  <section class="card user-page" v-if="user">
-    <div class="profile">
-      <img :src="user.icon || defaultIcon" alt="avatar" />
-      <div class="profile-main">
-        <h2>{{ user.nickName || "用户" }}</h2>
-        <p class="uid">用户 ID：{{ user.id }}</p>
-        <p v-if="user.city" class="muted">城市：{{ user.city }}</p>
-        <p v-if="user.introduce" class="intro">{{ user.introduce }}</p>
-        <div class="counts">
-          <span>关注 {{ user.followee ?? 0 }}</span>
-          <span>粉丝 {{ user.fans ?? 0 }}</span>
+  <div v-if="user" class="wrap">
+    <section class="card user-page">
+      <div class="profile">
+        <img :src="user.icon || defaultIcon" alt="avatar" />
+        <div class="profile-main">
+          <h2>{{ user.nickName || "用户" }}</h2>
+          <p class="uid">用户 ID：{{ user.id }}</p>
+          <p v-if="user.city" class="muted">城市：{{ user.city }}</p>
+          <p v-if="user.introduce" class="intro">{{ user.introduce }}</p>
+          <div class="counts">
+            <span>关注 {{ user.followee ?? 0 }}</span>
+            <span>粉丝 {{ user.fans ?? 0 }}</span>
+          </div>
         </div>
+        <el-button type="primary" plain @click="toggleFollow">{{ followText }}</el-button>
       </div>
-      <el-button type="primary" plain @click="toggleFollow">{{ followText }}</el-button>
-    </div>
-  </section>
+    </section>
+
+    <section class="card blog-box">
+      <div class="blog-head">
+        <h3>博客</h3>
+        <router-link class="all-link" :to="`/community/user/${targetId}/blogs`">全部</router-link>
+      </div>
+      <div v-if="blogsLoading" class="muted">加载中…</div>
+      <ul v-else-if="blogs.length" class="blog-ul">
+        <li v-for="b in blogs" :key="b.id" @click="goBlog(b.id)">
+          {{ b.title }}
+        </li>
+      </ul>
+      <p v-else class="muted">暂无</p>
+    </section>
+  </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import http from "../api/http";
-import { normalizePublicUser } from "../utils/dto";
+import { normalizeBlogCard, normalizePublicUser } from "../utils/dto";
 
 const props = defineProps({
   id: {
@@ -38,8 +54,11 @@ const props = defineProps({
 });
 
 const route = useRoute();
+const router = useRouter();
 const user = ref(null);
 const followed = ref(false);
+const blogs = ref([]);
+const blogsLoading = ref(false);
 const defaultIcon = "/imgs/icons/default-icon.png";
 const targetId = props.id || route.params.id;
 
@@ -50,6 +69,23 @@ const fetchUser = async () => {
   user.value = normalizePublicUser(raw);
   const flag = await http.get(`/follow/or/not/${targetId}`);
   followed.value = Boolean(flag);
+};
+
+const goBlog = (id) => {
+  router.push(`/community/blog/${id}`);
+};
+
+const loadBlogs = async () => {
+  blogsLoading.value = true;
+  try {
+    const data = await http.get(`/blog/of/user/${targetId}`);
+    const list = Array.isArray(data) ? data : [];
+    blogs.value = list.slice(0, 8).map((x) => normalizeBlogCard(x));
+  } catch {
+    blogs.value = [];
+  } finally {
+    blogsLoading.value = false;
+  }
 };
 
 const toggleFollow = async () => {
@@ -67,6 +103,7 @@ const toggleFollow = async () => {
 onMounted(async () => {
   try {
     await fetchUser();
+    await loadBlogs();
   } catch (error) {
     ElMessage.error(error.message);
   }
@@ -132,5 +169,59 @@ h2 {
   gap: 16px;
   font-size: 13px;
   color: var(--kc-muted);
+}
+
+.wrap {
+  display: grid;
+  gap: 14px;
+}
+
+.blog-box {
+  padding: 16px 20px 20px;
+}
+
+.blog-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.blog-head h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--kc-text);
+}
+
+.all-link {
+  font-size: 13px;
+  color: var(--el-color-primary);
+  text-decoration: none;
+}
+
+.all-link:hover {
+  text-decoration: underline;
+}
+
+.blog-ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.blog-ul li {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--kc-border-soft);
+  font-size: 14px;
+  color: var(--kc-text);
+  cursor: pointer;
+}
+
+.blog-ul li:last-child {
+  border-bottom: none;
+}
+
+.blog-ul li:hover {
+  color: var(--el-color-primary);
 }
 </style>

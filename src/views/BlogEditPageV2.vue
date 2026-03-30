@@ -2,7 +2,6 @@
   <section class="editor-wrap">
     <div class="editor-card">
       <h2>发布帖子</h2>
-      <p class="sub">Markdown 语法请自行书写。下方会根据正文<strong>实时渲染</strong>预览（含图片）。仅提供图片上传、文件上传；接口就绪后会自动填入地址。</p>
 
       <el-form label-width="90px" class="form-area">
         <el-form-item label="标题">
@@ -40,7 +39,7 @@
 
         <el-form-item label="文件列表" class="full-width-item">
           <div class="uploaded-panel">
-            <p v-if="!uploadedFiles.length" class="uploaded-empty">暂无。上传文件后在此显示名称与链接（不会自动写入正文）。</p>
+            <p v-if="!uploadedFiles.length" class="uploaded-empty">暂无</p>
             <ul v-else class="uploaded-list">
               <li v-for="(f, i) in uploadedFiles" :key="i">
                 <span class="fname">{{ f.name }}</span>
@@ -134,13 +133,13 @@ const onImageSelected = async (event) => {
     const data = await http.post("/blog/upload", fd);
     const url = unwrapUploadUrl(data);
     if (!url) {
-      ElMessage.warning("接口未返回图片地址。后端完成后应返回 URL 或 { url }。");
+      ElMessage.warning("未返回图片地址");
       return;
     }
     insertAtCursor(`\n\n![图片](${url})\n\n`);
     ElMessage.success("已插入图片");
   } catch (e) {
-    ElMessage.error(e.message || "图片上传失败（后端未完成时可先在正文手写 ![](地址)）");
+    ElMessage.error(e.message || "图片上传失败");
   } finally {
     imageUploading.value = false;
   }
@@ -159,13 +158,13 @@ const onFileSelected = async (event) => {
     const data = await http.post("/blog/file/upload", fd);
     const url = unwrapUploadUrl(data);
     if (!url) {
-      ElMessage.warning("接口未返回文件地址。后端完成后应返回 URL 或 { url }。");
+      ElMessage.warning("未返回文件地址");
       return;
     }
     uploadedFiles.value = [...uploadedFiles.value, { name: file.name, url }];
     ElMessage.success("文件已记录到底部列表");
   } catch (e) {
-    ElMessage.error(e.message || "文件上传失败（后端未完成时可稍后再试）");
+    ElMessage.error(e.message || "文件上传失败");
   } finally {
     fileUploading.value = false;
   }
@@ -226,13 +225,6 @@ h2 {
   font-size: 34px;
   font-family: Georgia, "Times New Roman", serif;
   color: var(--kc-text);
-}
-
-.sub {
-  margin: 12px 0 0;
-  color: var(--kc-muted);
-  line-height: 1.75;
-  max-width: 900px;
 }
 
 .form-area {

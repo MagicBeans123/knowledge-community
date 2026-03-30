@@ -115,6 +115,39 @@ export function normalizeCurrentUser(payload) {
   };
 }
 
+/** know_shop */
+export function normalizeShop(raw) {
+  const s = raw || {};
+  const imgs = s.images ? String(s.images).split(",").map((x) => x.trim()).filter(Boolean) : [];
+  return {
+    ...s,
+    userId: s.userId ?? s.user_id,
+    typeId: s.typeId ?? s.type_id,
+    avgPrice: s.avgPrice ?? s.avg_price,
+    openHours: s.openHours ?? s.open_hours,
+    createTime: s.createTime ?? s.create_time,
+    updateTime: s.updateTime ?? s.update_time,
+    sold: s.sold ?? 0,
+    comments: s.comments ?? 0,
+    score: s.score ?? 0,
+    cover: s.cover || imgs[0] || ""
+  };
+}
+
+/** know_voucher */
+export function normalizeVoucher(raw) {
+  const v = raw || {};
+  return {
+    ...v,
+    shopId: v.shopId ?? v.shop_id,
+    subTitle: v.subTitle ?? v.sub_title,
+    payValue: v.payValue ?? v.pay_value,
+    actualValue: v.actualValue ?? v.actual_value,
+    createTime: v.createTime ?? v.create_time,
+    updateTime: v.updateTime ?? v.update_time
+  };
+}
+
 const GENDER_LABELS = { 0: "保密", 1: "男", 2: "女" };
 
 export function genderLabel(value) {

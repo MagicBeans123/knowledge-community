@@ -1,14 +1,7 @@
 <template>
   <div class="explore-page">
     <section class="hero card">
-      <div>
-        <p class="eyebrow">知识发现</p>
-        <h2>知识探索</h2>
-        <p class="desc">基于热度与内容匹配推荐精选博客，帮助你快速找到高价值内容。</p>
-      </div>
-      <div class="hero-tags">
-        <span v-for="tag in topTags" :key="tag">{{ tag }}</span>
-      </div>
+      <h2 class="hero-title">知识探索</h2>
     </section>
 
     <section class="list-wrap card">
@@ -36,7 +29,6 @@
           </div>
           <div class="content">
             <h4 @click="goBlogDetail(blogItem.id)">{{ blogItem.title }}</h4>
-            <div class="reason">{{ recommendReason(blogItem) }}</div>
             <div class="meta">
               <div class="author">
                 <img :src="blogItem.icon || defaultIcon" alt="avatar" />
@@ -72,8 +64,6 @@ const page = ref(1);
 const loading = ref(false);
 const hasMore = ref(true);
 const defaultIcon = "/imgs/icons/default-icon.png";
-const topTags = ["前端工程", "效率工具", "学习方法", "项目实战", "思维模型"];
-
 const filteredBlogs = computed(() => {
   const kw = props.keyword.trim().toLowerCase();
   if (!kw) return blogs.value;
@@ -96,13 +86,6 @@ const fetchBlogs = async () => {
   } finally {
     loading.value = false;
   }
-};
-
-const recommendReason = (blogItem) => {
-  const liked = blogItem.liked || 0;
-  if (liked >= 100) return "高热度推荐：近期用户互动活跃";
-  if ((blogItem.title || "").length > 20) return "深度内容：标题信息量较高";
-  return "猜你想看：与热门主题相关";
 };
 
 const toggleLike = async (blogItem) => {
@@ -156,51 +139,14 @@ onMounted(async () => {
 }
 
 .hero {
-  padding: 22px 26px;
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  align-items: center;
-  flex-wrap: wrap;
+  padding: 18px 22px;
 }
 
-.eyebrow {
+.hero-title {
   margin: 0;
-  font-size: 13px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--kc-subtle);
-}
-
-h2 {
-  margin: 8px 0;
-  font-size: 32px;
+  font-size: 28px;
   font-family: Georgia, "Times New Roman", serif;
   color: var(--kc-text);
-}
-
-.desc {
-  margin: 0;
-  max-width: 520px;
-  line-height: 1.65;
-  color: var(--kc-muted);
-}
-
-.hero-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  max-width: 420px;
-  justify-content: flex-end;
-}
-
-.hero-tags span {
-  border: 1px solid var(--kc-border-soft);
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 13px;
-  color: var(--kc-muted);
-  background: var(--kc-card-elevated);
 }
 
 .list-wrap {
@@ -289,18 +235,8 @@ h4 {
   color: var(--kc-text);
 }
 
-.reason {
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--kc-muted);
-  background: rgba(77, 92, 66, 0.08);
-  border-radius: 8px;
-  padding: 8px 10px;
-  line-height: 1.5;
-}
-
 .meta {
-  margin-top: 12px;
+  margin-top: 10px;
   display: flex;
   justify-content: space-between;
   align-items: center;

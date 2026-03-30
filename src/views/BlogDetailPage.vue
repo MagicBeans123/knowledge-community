@@ -23,15 +23,23 @@
         <div class="author-row">
           <img class="avatar" :src="blog.icon || defaultIcon" alt="" />
           <div class="author-text">
-            <router-link v-if="blog.userId" class="author-name" :to="`/community/other-info/${blog.userId}`">
-              {{ blog.nickName || "匿名用户" }}
-            </router-link>
-            <span v-else class="author-name plain">{{ blog.nickName || "匿名用户" }}</span>
+            <div class="author-line">
+              <router-link v-if="blog.userId" class="author-name" :to="`/community/other-info/${blog.userId}`">
+                {{ blog.nickName || "匿名用户" }}
+              </router-link>
+              <span v-else class="author-name plain">{{ blog.nickName || "匿名用户" }}</span>
+              <router-link v-if="blog.userId" class="blogs-link" :to="`/community/user/${blog.userId}/blogs`">全部博客</router-link>
+            </div>
             <span class="meta-line">
               <time>{{ formatDate(blog.createTime) }}</time>
               <span v-if="blog.comments != null" class="dot">·</span>
               <span v-if="blog.comments != null">评论 {{ blog.comments }}</span>
             </span>
+            <div v-if="showAuthorFollow" class="author-actions">
+              <el-button size="small" type="primary" plain :loading="followLoading" @click="toggleFollowAuthor">
+                {{ followedAuthor ? "取消关注" : "关注" }}
+              </el-button>
+            </div>
           </div>
         </div>
 
@@ -77,7 +85,9 @@
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
+import { storeToRefs } from "pinia";
 import http from "../api/http";
+import { useUserStore } from "../stores/user";
 import { normalizeBlogDetail, normalizeComment } from "../utils/dto";
 import { isLikelyHtmlContent, renderMarkdown } from "../utils/markdown";
 
@@ -96,7 +106,12 @@ const props = defineProps({
 
 const route = useRoute();
 const router = useRouter();
+const userStore = useUserStore();
+const { user: me } = storeToRefs(userStore);
+
 const blog = ref(null);
+const followedAuthor = ref(false);
+const followLoading = ref(false);
 const comments = ref([]);
 const commentDraft = ref("");
 const commentSubmitting = ref(false);
@@ -112,6 +127,12 @@ const articleHtml = computed(() => {
   const c = blog.value?.content;
   if (!c || typeof c !== "string") return "";
   return isLikelyHtmlContent(c) ? c : renderMarkdown(c);
+});
+
+const showAuthorFollow = computed(() => {
+  const uid = blog.value?.userId;
+  if (!uid || !me.value?.id) return false;
+  return Number(uid) !== Number(me.value.id);
 });
 
 const formatDate = (timestamp) => {
@@ -186,11 +207,39 @@ const toggleLike = async () => {
   }
 };
 
+const loadAuthorFollow = async () => {
+  const uid = blog.value?.userId;
+  if (!uid || !showAuthorFollow.value) return;
+  try {
+    const flag = await http.get(`/follow/or/not/${uid}`);
+    followedAuthor.value = Boolean(flag);
+  } catch {
+    followedAuthor.value = false;
+  }
+};
+
+const toggleFollowAuthor = async () => {
+  const uid = blog.value?.userId;
+  if (!uid) return;
+  followLoading.value = true;
+  try {
+    await http.put(`/follow/${uid}/${!followedAuthor.value}`);
+    followedAuthor.value = !followedAuthor.value;
+    ElMessage.success(followedAuthor.value ? "已关注" : "已取消关注");
+  } catch (error) {
+    ElMessage.error(error.message);
+  } finally {
+    followLoading.value = false;
+  }
+};
+
 onMounted(async () => {
   loadError.value = "";
   loading.value = true;
   try {
+    await userStore.fetchMe();
     await fetchBlog();
+    await loadAuthorFollow();
     await fetchComments();
   } catch (error) {
     loadError.value = error.message || "请检查网络或稍后重试";
@@ -271,9 +320,30 @@ onMounted(async () => {
 .author-row {
   display: flex;
   gap: 12px;
-  align-items: center;
+  align-items: flex-start;
   padding: 16px 0 20px;
   border-bottom: 1px solid var(--kc-border-soft);
+}
+
+.author-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.blogs-link {
+  font-size: 13px;
+  color: var(--el-color-primary);
+  text-decoration: none;
+}
+
+.blogs-link:hover {
+  text-decoration: underline;
+}
+
+.author-actions {
+  margin-top: 8px;
 }
 
 .avatar {
