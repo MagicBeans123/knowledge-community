@@ -1,6 +1,7 @@
 <template>
   <div v-if="user" class="wrap">
     <section class="card user-page">
+      <p v-if="isSelf" class="preview-banner">他人视角：这是你对外展示的样子（与访客看到的一致）</p>
       <div class="profile">
         <img :src="user.icon || defaultIcon" alt="avatar" />
         <div class="profile-main">
@@ -13,7 +14,11 @@
             <span>粉丝 {{ user.fans ?? 0 }}</span>
           </div>
         </div>
-        <el-button type="primary" plain @click="toggleFollow">{{ followText }}</el-button>
+        <el-button v-if="!isSelf" type="primary" plain @click="toggleFollow">{{ followText }}</el-button>
+      </div>
+      <div class="quick-nav">
+        <router-link class="qn-link" :to="`/community/user/${targetId}/shops`">{{ shopLinkLabel }}</router-link>
+        <router-link class="qn-link" :to="`/community/user/${targetId}/blogs`">{{ blogLinkLabel }}</router-link>
       </div>
     </section>
 
@@ -37,7 +42,9 @@
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
+import { storeToRefs } from "pinia";
 import http from "../api/http";
+import { useUserStore } from "../stores/user";
 import { normalizeBlogCard, normalizePublicUser } from "../utils/dto";
 
 const props = defineProps({
@@ -55,6 +62,8 @@ const props = defineProps({
 
 const route = useRoute();
 const router = useRouter();
+const userStore = useUserStore();
+const { user: me } = storeToRefs(userStore);
 const user = ref(null);
 const followed = ref(false);
 const blogs = ref([]);
@@ -63,6 +72,15 @@ const defaultIcon = "/imgs/icons/default-icon.png";
 const targetId = props.id || route.params.id;
 
 const followText = computed(() => (followed.value ? "取消关注" : "关注"));
+
+const isSelf = computed(() => {
+  const mid = me.value?.id;
+  if (mid == null || targetId == null || targetId === "") return false;
+  return Number(mid) === Number(targetId);
+});
+
+const shopLinkLabel = computed(() => (isSelf.value ? "我的商店" : "Ta 的商店"));
+const blogLinkLabel = computed(() => (isSelf.value ? "我的博客" : "Ta 的博客"));
 
 const fetchUser = async () => {
   const raw = await http.get(`/user/${targetId}`);
@@ -78,7 +96,7 @@ const goBlog = (id) => {
 const loadBlogs = async () => {
   blogsLoading.value = true;
   try {
-    const data = await http.get(`/blog/of/user/${targetId}`);
+    const data = await http.get(`/blog/of/user/${targetId}?current=1`);
     const list = Array.isArray(data) ? data : [];
     blogs.value = list.slice(0, 8).map((x) => normalizeBlogCard(x));
   } catch {
@@ -102,6 +120,14 @@ const toggleFollow = async () => {
 
 onMounted(async () => {
   try {
+    const token = sessionStorage.getItem("token");
+    if (token && token !== "undefined" && token !== "null") {
+      try {
+        await userStore.fetchMe();
+      } catch {
+        /* 未登录或接口失败不影响公开资料页 */
+      }
+    }
     await fetchUser();
     await loadBlogs();
   } catch (error) {
@@ -116,6 +142,35 @@ onMounted(async () => {
   border: 1px solid var(--kc-border);
   border-radius: 14px;
   box-shadow: var(--kc-shadow-soft);
+}
+
+.preview-banner {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--kc-muted);
+  background: rgba(77, 92, 66, 0.08);
+  border: 1px solid var(--kc-border-soft);
+  border-radius: 10px;
+}
+
+.quick-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--kc-border-soft);
+}
+
+.qn-link {
+  font-size: 14px;
+  color: var(--el-color-primary);
+  text-decoration: none;
+}
+
+.qn-link:hover {
+  text-decoration: underline;
 }
 
 .user-page {

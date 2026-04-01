@@ -11,6 +11,7 @@ import ShopListPage from "./views/ShopListPage.vue";
 import ShopDetailPage from "./views/ShopDetailPage.vue";
 import ShopCreatePage from "./views/ShopCreatePage.vue";
 import UserBlogsPage from "./views/UserBlogsPage.vue";
+import UserShopsPage from "./views/UserShopsPage.vue";
 import LoginPage from "./views/LoginPage.vue";
 import RegisterPage from "./views/RegisterPage.vue";
 
@@ -26,6 +27,7 @@ const routes = [
       { path: "shop-create", name: "shop-create", component: ShopCreatePage },
       { path: "shop/:id", name: "shop-detail", component: ShopDetailPage, props: true },
       { path: "user/:userId/blogs", name: "user-blogs", component: UserBlogsPage, props: true },
+      { path: "user/:userId/shops", name: "user-shops", component: UserShopsPage, props: true },
       { path: "blog/:id", name: "blog-detail", component: BlogDetailPage, props: true },
       { path: "blog-edit", name: "blog-edit", component: BlogEditPageV2 },
       { path: "info", name: "info", component: UserInfoPageV2 },

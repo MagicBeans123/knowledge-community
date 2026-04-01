@@ -28,6 +28,7 @@
                 {{ blog.nickName || "匿名用户" }}
               </router-link>
               <span v-else class="author-name plain">{{ blog.nickName || "匿名用户" }}</span>
+              <router-link v-if="blog.userId" class="blogs-link" :to="`/community/user/${blog.userId}/shops`">Ta 的商店</router-link>
               <router-link v-if="blog.userId" class="blogs-link" :to="`/community/user/${blog.userId}/blogs`">全部博客</router-link>
             </div>
             <span class="meta-line">
@@ -61,8 +62,8 @@
               发表评论
             </el-button>
           </div>
-          <ul class="comment-list" v-if="comments.length">
-            <li v-for="c in comments" :key="c.id">
+          <ul class="comment-list" v-if="topLevelComments.length">
+            <li v-for="c in topLevelComments" :key="c.id">
               <img :src="c.icon || defaultIcon" alt="" class="c-avatar" />
               <div class="c-body">
                 <div class="c-meta">
@@ -71,6 +72,26 @@
                   <button type="button" class="like-mini" @click="toggleCommentLike(c)">赞 {{ c.liked ?? 0 }}</button>
                 </div>
                 <p class="c-text">{{ c.content }}</p>
+                <div class="reply-actions">
+                  <button type="button" class="reply-toggle" @click="toggleReplies(c)">
+                    {{ isRepliesExpanded(c.id) ? "收起回复" : "展开回复" }}
+                  </button>
+                </div>
+                <ul v-if="isRepliesExpanded(c.id)" class="reply-list">
+                  <li v-if="isRepliesLoading(c.id)" class="reply-state">加载中…</li>
+                  <li v-else-if="!repliesByParent[c.id]?.length" class="reply-state">暂无回复</li>
+                  <li v-for="r in repliesByParent[c.id]" :key="r.id" class="reply-item">
+                    <img :src="r.icon || defaultIcon" alt="" class="reply-avatar" />
+                    <div class="reply-body">
+                      <div class="c-meta">
+                        <b>{{ r.nickName || "用户" }}</b>
+                        <span class="c-time">{{ formatDate(r.createTime) }}</span>
+                        <button type="button" class="like-mini" @click="toggleCommentLike(r)">赞 {{ r.liked ?? 0 }}</button>
+                      </div>
+                      <p class="c-text">{{ r.content }}</p>
+                    </div>
+                  </li>
+                </ul>
               </div>
             </li>
           </ul>
@@ -113,6 +134,9 @@ const blog = ref(null);
 const followedAuthor = ref(false);
 const followLoading = ref(false);
 const comments = ref([]);
+const expandedParentIds = ref([]);
+const repliesByParent = ref({});
+const repliesLoadingByParent = ref({});
 const commentDraft = ref("");
 const commentSubmitting = ref(false);
 const loading = ref(true);
@@ -124,10 +148,14 @@ const defaultIcon = "/imgs/icons/default-icon.png";
 const blogId = props.id || route.params.id;
 
 const articleHtml = computed(() => {
-  const c = blog.value?.content;
+  const c = blog.value?.markdownContent ?? blog.value?.content;
   if (!c || typeof c !== "string") return "";
   return isLikelyHtmlContent(c) ? c : renderMarkdown(c);
 });
+
+const topLevelComments = computed(() =>
+  comments.value.filter((item) => Number(item.parentId ?? 0) === 0)
+);
 
 const showAuthorFollow = computed(() => {
   const uid = blog.value?.userId;
@@ -153,12 +181,47 @@ const fetchBlog = async () => {
 const fetchComments = async () => {
   commentsError.value = "";
   try {
-    const data = await http.get(`/blog/${blogId}/comments`);
+    const data = await http.get(`/blog/${blogId}/comments?parentId=0`);
     const list = Array.isArray(data) ? data : [];
     comments.value = list.map((item) => normalizeComment(item));
+    expandedParentIds.value = [];
+    repliesByParent.value = {};
+    repliesLoadingByParent.value = {};
   } catch (error) {
     commentsError.value = error.message || "评论暂时无法加载，正文仍可阅读";
     comments.value = [];
+  }
+};
+
+const isRepliesExpanded = (parentId) => expandedParentIds.value.includes(parentId);
+const isRepliesLoading = (parentId) => Boolean(repliesLoadingByParent.value[parentId]);
+
+const fetchReplies = async (parentId) => {
+  repliesLoadingByParent.value = { ...repliesLoadingByParent.value, [parentId]: true };
+  try {
+    const data = await http.get(`/blog/${blogId}/comments?parentId=${parentId}`);
+    const list = Array.isArray(data) ? data : [];
+    repliesByParent.value = {
+      ...repliesByParent.value,
+      [parentId]: list.map((item) => normalizeComment(item))
+    };
+  } catch (error) {
+    ElMessage.error(error.message || "回复加载失败");
+    repliesByParent.value = { ...repliesByParent.value, [parentId]: [] };
+  } finally {
+    repliesLoadingByParent.value = { ...repliesLoadingByParent.value, [parentId]: false };
+  }
+};
+
+const toggleReplies = async (row) => {
+  const parentId = row.id;
+  if (isRepliesExpanded(parentId)) {
+    expandedParentIds.value = expandedParentIds.value.filter((id) => id !== parentId);
+    return;
+  }
+  expandedParentIds.value = [...expandedParentIds.value, parentId];
+  if (!Object.prototype.hasOwnProperty.call(repliesByParent.value, parentId)) {
+    await fetchReplies(parentId);
   }
 };
 
@@ -176,8 +239,9 @@ const submitComment = async () => {
       answerId: 0
     });
     commentDraft.value = "";
-    await fetchComments();
-    await fetchBlog();
+    if (blog.value?.comments != null) {
+      blog.value.comments += 1;
+    }
     ElMessage.success("评论已发布");
   } catch (error) {
     ElMessage.error(error.message);
@@ -189,7 +253,7 @@ const submitComment = async () => {
 const toggleCommentLike = async (row) => {
   try {
     await http.put(`/blog/comment/like/${row.id}`);
-    await fetchComments();
+    row.liked = Number(row.liked ?? 0) + 1;
   } catch (error) {
     ElMessage.error(error.message);
   }
@@ -570,6 +634,53 @@ onMounted(async () => {
   line-height: 1.65;
   color: var(--kc-text);
   font-size: 14px;
+}
+
+.reply-actions {
+  margin-top: 8px;
+}
+
+.reply-toggle {
+  border: none;
+  background: transparent;
+  color: var(--el-color-primary);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0;
+}
+
+.reply-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 10px 0 0 0;
+  border-top: 1px dashed var(--kc-border-soft);
+  display: grid;
+  gap: 10px;
+}
+
+.reply-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.reply-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--kc-border-soft);
+}
+
+.reply-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.reply-state {
+  margin: 0;
+  font-size: 13px;
+  color: var(--kc-muted);
 }
 
 .empty-c {

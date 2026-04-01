@@ -9,6 +9,7 @@
       </div>
       <div class="hero-actions">
         <span class="gender-tag">{{ genderLabel(profile.gender) }}</span>
+        <el-button v-if="profile.id != null" plain @click="goPublicView">他人视角</el-button>
         <el-button type="primary" @click="goEdit">修改资料</el-button>
       </div>
     </div>
@@ -76,6 +77,12 @@ const profile = computed(() => userStore.user || {});
 
 const goEdit = () => {
   router.push("/community/info-edit");
+};
+
+const goPublicView = () => {
+  const id = profile.value?.id;
+  if (id == null) return;
+  router.push(`/community/other-info/${id}`);
 };
 
 onMounted(async () => {

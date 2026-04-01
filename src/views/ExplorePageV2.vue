@@ -13,28 +13,28 @@
       </div>
 
       <div class="blog-grid" @scroll="onScroll">
-        <article class="blog-card" v-for="blogItem in filteredBlogs" :key="blogItem.id">
-          <div class="cover-wrap" @click="goBlogDetail(blogItem.id)">
-            <img
-              v-if="blogItem.cover && !blogItem.coverError"
-              class="cover"
-              :src="blogItem.cover"
-              :alt="blogItem.title"
-              loading="lazy"
-              @error="blogItem.coverError = true"
-            />
-            <div v-else class="cover cover--placeholder" aria-hidden="true">
-              <span class="ph-icon">文</span>
+        <article
+          v-for="blogItem in filteredBlogs"
+          :key="blogItem.id"
+          class="blog-card"
+          @click="goBlogDetail(blogItem.id)"
+        >
+          <h4 class="title">{{ blogItem.title }}</h4>
+          <p v-if="formatTime(blogItem.createTime)" class="time-line">{{ formatTime(blogItem.createTime) }}</p>
+          <div class="meta">
+            <div
+              class="author"
+              :class="{ clickable: Boolean(blogItem.userId) }"
+              @click.stop="goAuthor(blogItem)"
+            >
+              <img :src="blogItem.icon || defaultIcon" alt="" />
+              <span>{{ blogItem.nickName || "匿名用户" }}</span>
             </div>
-          </div>
-          <div class="content">
-            <h4 @click="goBlogDetail(blogItem.id)">{{ blogItem.title }}</h4>
-            <div class="meta">
-              <div class="author">
-                <img :src="blogItem.icon || defaultIcon" alt="avatar" />
-                <span>{{ blogItem.nickName || "匿名用户" }}</span>
-              </div>
-              <button class="like-btn" @click="toggleLike(blogItem)">点赞 {{ blogItem.liked || 0 }}</button>
+            <div class="stats">
+              <button type="button" class="like-btn" @click.stop="toggleLike(blogItem)">
+                点赞 {{ blogItem.liked ?? 0 }}
+              </button>
+              <span class="comment-stat">评论 {{ blogItem.comments ?? 0 }}</span>
             </div>
           </div>
         </article>
@@ -60,10 +60,22 @@ const props = defineProps({
 
 const router = useRouter();
 const blogs = ref([]);
-const page = ref(1);
 const loading = ref(false);
 const hasMore = ref(true);
 const defaultIcon = "/imgs/icons/default-icon.png";
+
+/** 探索卡片展示用时间 */
+const formatTime = (t) => {
+  if (!t) return "";
+  const d = new Date(t);
+  if (Number.isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${y}-${m}-${day} ${hh}:${mm}`;
+};
 const filteredBlogs = computed(() => {
   const kw = props.keyword.trim().toLowerCase();
   if (!kw) return blogs.value;
@@ -78,11 +90,15 @@ const fetchBlogs = async () => {
   if (loading.value || !hasMore.value) return;
   loading.value = true;
   try {
-    const data = await http.get(`/blog/hot?current=${page.value}`);
+    const data = await http.get("/blog/hot");
     const list = Array.isArray(data) ? data : [];
     const mapped = list.map((item) => normalizeBlogCard(item));
-    blogs.value = blogs.value.concat(mapped);
-    if (!list.length) hasMore.value = false;
+    if (!mapped.length) {
+      hasMore.value = false;
+      return;
+    }
+    const exists = new Set(blogs.value.map((x) => x.id));
+    blogs.value = blogs.value.concat(mapped.filter((x) => !exists.has(x.id)));
   } finally {
     loading.value = false;
   }
@@ -92,8 +108,10 @@ const toggleLike = async (blogItem) => {
   try {
     await http.put(`/blog/like/${blogItem.id}`);
     const latest = await http.get(`/blog/${blogItem.id}`);
-    blogItem.liked = latest.liked;
-    blogItem.isLike = latest.isLike;
+    const n = normalizeBlogCard(latest);
+    blogItem.liked = n.liked;
+    blogItem.comments = n.comments;
+    blogItem.isLike = n.isLike;
   } catch (error) {
     ElMessage.error(error.message || "操作失败");
   }
@@ -103,15 +121,18 @@ const goBlogDetail = (blogId) => {
   router.push(`/community/blog/${blogId}`);
 };
 
+const goAuthor = (blogItem) => {
+  if (!blogItem.userId) return;
+  router.push(`/community/other-info/${blogItem.userId}`);
+};
+
 const onScroll = async (event) => {
   const target = event.target;
   if (target.scrollTop + target.clientHeight < target.scrollHeight - 20) return;
   if (!hasMore.value || loading.value) return;
-  page.value += 1;
   try {
     await fetchBlogs();
   } catch (error) {
-    page.value -= 1;
     ElMessage.error(error.message);
   }
 };
@@ -173,7 +194,7 @@ onMounted(async () => {
   padding-right: 4px;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 16px;
+  gap: 14px;
 }
 
 .blog-card {
@@ -182,6 +203,8 @@ onMounted(async () => {
   overflow: hidden;
   background: var(--kc-card-elevated);
   transition: box-shadow 0.2s ease, transform 0.2s ease;
+  padding: 14px 16px 16px;
+  cursor: pointer;
 }
 
 .blog-card:hover {
@@ -189,50 +212,23 @@ onMounted(async () => {
   transform: translateY(-2px);
 }
 
-.cover-wrap {
-  cursor: pointer;
-  background: #ebe4d6;
-}
-
-.cover {
-  display: block;
-  width: 100%;
-  height: 176px;
-  object-fit: cover;
-}
-
-.cover--placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(145deg, #e8dfd0, #d4c9b8);
-  color: var(--kc-muted);
-}
-
-.ph-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  border: 1px solid rgba(45, 52, 35, 0.12);
-  display: grid;
-  place-items: center;
-  font-size: 20px;
-  font-family: Georgia, serif;
-  color: var(--kc-text);
-  opacity: 0.55;
-}
-
-.content {
-  padding: 14px 14px 16px;
-}
-
-h4 {
+.title {
   margin: 0;
-  line-height: 1.45;
-  cursor: pointer;
-  min-height: 44px;
+  line-height: 1.5;
+  min-height: 2.8em;
   font-size: 16px;
+  font-weight: 600;
   color: var(--kc-text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.time-line {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--kc-muted);
 }
 
 .meta {
@@ -240,7 +236,21 @@ h4 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.stats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.comment-stat {
+  font-size: 13px;
+  color: var(--kc-muted);
+  user-select: none;
 }
 
 .author {
@@ -264,6 +274,14 @@ h4 {
   white-space: nowrap;
   font-size: 13px;
   color: var(--kc-text);
+}
+
+.author.clickable {
+  cursor: pointer;
+}
+
+.author.clickable:hover span {
+  color: var(--el-color-primary);
 }
 
 .like-btn {

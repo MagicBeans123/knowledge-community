@@ -1,6 +1,6 @@
 /**
  * 与 database_structure 对应的 JSON 驼峰字段约定（后端序列化）。
- * know_blog: userId, title, content, liked, comments, isCommit, createTime, updateTime
+ * know_blog: userId, title, content / markdownContent, liked, comments, isCommit, createTime, updateTime
  * know_user: phone, email, nickName, icon, sign, createTime, updateTime
  * know_user_info: city, introduce, fans, followee, gender, birthday, credits, level
  * know_blog_comments: userId, blogId, parentId, answerId, content, liked, status, createTime
@@ -26,10 +26,11 @@ export function firstImageFromBlogContent(content) {
 export function normalizeBlogCard(raw) {
   const r = raw || {};
   const nickName = r.nickName ?? r.name ?? "";
+  const bodyForPreview = r.markdownContent ?? r.markdown_content ?? r.content ?? "";
   const cover =
     r.cover ||
     (r.images && String(r.images).split(",")[0].trim()) ||
-    firstImageFromBlogContent(r.content) ||
+    firstImageFromBlogContent(bodyForPreview) ||
     "";
   return {
     ...r,

@@ -16,6 +16,7 @@
         </div>
         <div v-if="shop.userId" class="owner-row">
           <router-link class="link" :to="`/community/other-info/${shop.userId}`">店主主页</router-link>
+          <router-link class="link" :to="`/community/user/${shop.userId}/shops`">店主全部商店</router-link>
           <router-link class="link" :to="`/community/user/${shop.userId}/blogs`">店主博客</router-link>
           <el-button
             v-if="showFollow"
