@@ -32,7 +32,7 @@
         />
       </el-form-item>
       <el-form-item label="密码">
-        <el-input v-model="form.password" show-password placeholder="留空则不修改密码" />
+        <el-input v-model="form.password" show-password placeholder="请输入密码" />
       </el-form-item>
       <el-form-item label="确认密码">
         <el-input v-model="form.confirmPassword" show-password placeholder="再次输入新密码" />
@@ -84,7 +84,11 @@ const validateForm = () => {
     ElMessage.warning("请选择性别");
     return false;
   }
-  if (form.value.password && form.value.password.length < 6) {
+  if (!form.value.password) {
+    ElMessage.warning("密码不能为空");
+    return false;
+  }
+  if (form.value.password.length < 6) {
     ElMessage.warning("密码至少 6 位");
     return false;
   }
@@ -104,11 +108,9 @@ const save = async () => {
     introduce: form.value.introduce?.trim() || "",
     city: form.value.city?.trim() || "",
     gender: form.value.gender,
-    birthday: form.value.birthday || ""
+    birthday: form.value.birthday || "",
+    password: form.value.password
   };
-  if (form.value.password) {
-    payload.password = form.value.password;
-  }
 
   await http.put("/user/info", payload);
   await userStore.fetchMe();

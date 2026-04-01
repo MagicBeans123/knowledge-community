@@ -4,7 +4,7 @@
       <img class="avatar" :src="profile.icon || defaultIcon" alt="avatar" />
       <div class="hero-info">
         <h2>{{ profile.nickName || "未设置昵称" }}</h2>
-        <p>账号：{{ profile.phone || "--" }}</p>
+        <p>手机号：{{ profile.phone || "--" }}</p>
         <p>城市：{{ profile.city || "未设置" }}</p>
       </div>
       <div class="hero-actions">

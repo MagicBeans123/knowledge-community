@@ -22,7 +22,7 @@
       </div>
       <el-button type="primary" class="full" @click="login">登录</el-button>
       <div class="jump-links">
-        <el-button link @click="router.push('/register')">还没有账号？去注册</el-button>
+        <el-button link @click="router.push('/register')">还没注册？去注册</el-button>
       </div>
     </section>
   </div>

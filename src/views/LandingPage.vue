@@ -21,7 +21,7 @@
         </p>
         <div class="cta-group">
           <button class="btn solid" @click="toRegister">开始注册</button>
-          <button class="btn outline" @click="toLogin">已有账号登录</button>
+          <button class="btn outline" @click="toLogin">去登录</button>
         </div>
       </section>
 

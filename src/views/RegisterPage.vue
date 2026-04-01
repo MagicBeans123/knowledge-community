@@ -2,16 +2,11 @@
   <div class="register-shell">
     <section class="register-card">
       <div class="head">
-        <h1>创建你的账号</h1>
+        <h1>手机号注册</h1>
         <p>注册后即可进入知识社区，发布与探索内容。</p>
       </div>
 
       <div class="form">
-        <div class="field">
-          <label>昵称</label>
-          <el-input v-model="form.nickName" placeholder="中文、英文、数字或下划线" @blur="checkNickName" />
-          <span v-if="errors.nickName" class="err">{{ errors.nickName }}</span>
-        </div>
         <div class="field">
           <label>手机号</label>
           <el-input v-model="form.phone" maxlength="11" placeholder="请输入11位手机号" @input="checkPhone" />
@@ -34,7 +29,7 @@
 
       <div class="actions">
         <el-button class="full" type="primary" @click="submitRegister">注册</el-button>
-        <el-button class="full" @click="goLogin">已有账号，去登录</el-button>
+        <el-button class="full" @click="goLogin">已有手机号，去登录</el-button>
       </div>
     </section>
   </div>
@@ -48,32 +43,18 @@ import http from "../api/http";
 
 const router = useRouter();
 const phoneRegex = /^1\d{10}$/;
-const nickNameRegex = /^[\u4e00-\u9fa5A-Za-z0-9_]+$/;
 
 const form = reactive({
-  nickName: "",
   phone: "",
   password: "",
   confirmPassword: ""
 });
 
 const errors = reactive({
-  nickName: "",
   phone: "",
   password: "",
   confirmPassword: ""
 });
-
-const checkNickName = () => {
-  const val = form.nickName.trim();
-  if (!val) {
-    errors.nickName = "昵称不能为空";
-  } else if (!nickNameRegex.test(val)) {
-    errors.nickName = "仅支持中文、英文、数字和下划线";
-  } else {
-    errors.nickName = "";
-  }
-};
 
 const checkPhone = () => {
   const val = form.phone.trim();
@@ -110,7 +91,6 @@ const checkConfirm = () => {
 };
 
 const submitRegister = async () => {
-  checkNickName();
   checkPhone();
   checkPassword();
   checkConfirm();
@@ -121,14 +101,15 @@ const submitRegister = async () => {
     errors.phone = "请输入正确的11位手机号";
   }
 
-  if (errors.nickName || errors.phone || errors.password || errors.confirmPassword) {
+  if (errors.phone || errors.password || errors.confirmPassword) {
     ElMessage.warning("请修正表单中的错误");
     return;
   }
 
   try {
+    const autoNickName = `用户${form.phone.trim().slice(-4)}`;
     await http.post("/user/register", {
-      nickName: form.nickName.trim(),
+      nickName: autoNickName,
       phone: form.phone.trim(),
       password: form.password
     });
