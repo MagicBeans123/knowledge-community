@@ -143,7 +143,7 @@ const loading = ref(true);
 const loadError = ref("");
 const commentsError = ref("");
 const likeLoading = ref(false);
-const defaultIcon = "/imgs/icons/default-icon.png";
+const defaultIcon = "/image/default.png";
 
 const blogId = props.id || route.params.id;
 

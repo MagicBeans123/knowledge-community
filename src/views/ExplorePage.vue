@@ -1,14 +1,7 @@
-﻿<template>
+<template>
   <div class="explore-page">
     <section class="hero card">
-      <div>
-        <p class="eyebrow">知识发现</p>
-        <h2>知识探索</h2>
-        <p class="desc">基于热度与内容匹配推荐精选博客，帮助你快速找到高价值内容。</p>
-      </div>
-      <div class="hero-tags">
-        <span v-for="tag in topTags" :key="tag">{{ tag }}</span>
-      </div>
+      <h2>知识探索</h2>
     </section>
 
     <section class="list-wrap card">
@@ -20,19 +13,19 @@
       </div>
 
       <div class="blog-grid" @scroll="onScroll">
-        <article class="blog-card" v-for="blogItem in filteredBlogs" :key="blogItem.id">
-          <img class="cover" :src="blogItem.cover" :alt="blogItem.title" @click="goBlogDetail(blogItem.id)" />
-          <div class="content">
-            <h4 @click="goBlogDetail(blogItem.id)">{{ blogItem.title }}</h4>
-            <div class="reason">{{ recommendReason(blogItem) }}</div>
-            <div class="meta">
-              <div class="author">
-                <img :src="blogItem.icon || defaultIcon" alt="avatar" />
-                <span>{{ blogItem.name || "匿名用户" }}</span>
-              </div>
-              <button class="like-btn" @click="toggleLike(blogItem)">
-                点赞 {{ blogItem.liked || 0 }}
+        <article class="blog-card" v-for="blogItem in filteredBlogs" :key="blogItem.id" @click="goBlogDetail(blogItem.id)">
+          <h4 class="title">{{ blogItem.title }}</h4>
+          <p v-if="formatTime(blogItem.createTime)" class="time-line">{{ formatTime(blogItem.createTime) }}</p>
+          <div class="meta">
+            <div class="author" :class="{ clickable: Boolean(blogItem.userId) }" @click.stop="goAuthor(blogItem)">
+              <img :src="blogItem.icon || defaultIcon" alt="avatar" />
+              <span>{{ blogItem.nickName || "匿名用户" }}</span>
+            </div>
+            <div class="stats">
+              <button class="like-btn" @click.stop="toggleLike(blogItem)">
+                点赞 {{ blogItem.liked ?? 0 }}
               </button>
+              <span class="comment-stat">评论 {{ blogItem.comments ?? 0 }}</span>
             </div>
           </div>
         </article>
@@ -42,10 +35,11 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import http from "../api/http";
+import { normalizeBlogCard } from "../utils/dto";
 
 const props = defineProps({
   keyword: {
@@ -57,73 +51,78 @@ const props = defineProps({
 
 const router = useRouter();
 const blogs = ref([]);
-const page = ref(1);
 const loading = ref(false);
-const defaultIcon = "/imgs/icons/default-icon.png";
-const topTags = ["前端工程", "效率工具", "学习方法", "项目实战", "思维模型"];
+const hasMore = ref(true);
+const defaultIcon = "/image/default.png";
+
+const formatTime = (t) => {
+  if (!t) return "";
+  const d = new Date(t);
+  if (Number.isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${y}-${m}-${day} ${hh}:${mm}`;
+};
 
 const filteredBlogs = computed(() => {
   const kw = props.keyword.trim().toLowerCase();
   if (!kw) return blogs.value;
   return blogs.value.filter((item) => {
     const title = (item.title || "").toLowerCase();
-    const author = (item.name || "").toLowerCase();
+    const author = (item.nickName || "").toLowerCase();
     return title.includes(kw) || author.includes(kw);
   });
 });
 
 const fetchBlogs = async () => {
-  if (loading.value) return;
+  if (loading.value || !hasMore.value) return;
   loading.value = true;
   try {
-    const data = await http.get(`/blog/hot?current=${page.value}`);
+    const data = await http.get("/blog/hot");
     const list = Array.isArray(data) ? data : [];
-    blogs.value = blogs.value.concat(
-      list.map((item) => ({
-        ...item,
-        cover: (item.images || "").split(",")[0] || ""
-      }))
-    );
+    const mapped = list.map((item) => normalizeBlogCard(item));
+    if (!mapped.length) {
+      hasMore.value = false;
+      return;
+    }
+    const exists = new Set(blogs.value.map((x) => x.id));
+    blogs.value = blogs.value.concat(mapped.filter((x) => !exists.has(x.id)));
   } finally {
     loading.value = false;
   }
 };
 
-const recommendReason = (blogItem) => {
-  const liked = blogItem.liked || 0;
-  if (liked >= 100) return "高热度推荐：近期用户互动活跃";
-  if ((blogItem.title || "").length > 20) return "深度内容：标题信息量较高";
-  return "猜你想看：与热门主题相关";
-};
-
 const toggleLike = async (blogItem) => {
   await http.put(`/blog/like/${blogItem.id}`);
   const latest = await http.get(`/blog/${blogItem.id}`);
-  blogItem.liked = latest.liked;
-  blogItem.isLike = latest.isLike;
+  const n = normalizeBlogCard(latest);
+  blogItem.liked = n.liked;
+  blogItem.comments = n.comments;
+  blogItem.isLike = n.isLike;
 };
 
 const goBlogDetail = (blogId) => {
   router.push(`/community/blog/${blogId}`);
 };
 
+const goAuthor = (blogItem) => {
+  if (!blogItem.userId) return;
+  router.push(`/community/other-info/${blogItem.userId}`);
+};
+
 const onScroll = async (event) => {
   const target = event.target;
   if (target.scrollTop + target.clientHeight < target.scrollHeight - 20) return;
-  page.value += 1;
+  if (!hasMore.value || loading.value) return;
   try {
     await fetchBlogs();
   } catch (error) {
     ElMessage.error(error.message);
   }
 };
-
-watch(
-  () => props.keyword,
-  (value) => {
-    if (value.trim()) ElMessage.success("已按关键词筛选");
-  }
-);
 
 onMounted(async () => {
   try {
@@ -141,104 +140,81 @@ onMounted(async () => {
 }
 
 .card {
-  background: #fff;
+  background: var(--kc-card);
+  border: 1px solid var(--kc-border);
   border-radius: 14px;
-  box-shadow: 0 8px 22px rgba(30, 45, 80, 0.08);
+  box-shadow: var(--kc-shadow);
 }
 
 .hero {
-  padding: 20px 24px;
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  align-items: center;
-}
-
-.eyebrow {
-  margin: 0;
-  color: #6a758f;
+  padding: 18px 22px;
 }
 
 h2 {
-  margin: 8px 0;
-  font-size: 34px;
-}
-
-.desc {
   margin: 0;
-  color: #6a758f;
-}
-
-.hero-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  max-width: 420px;
-}
-
-.hero-tags span {
-  border: 1px solid #dfe5f0;
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 13px;
-  color: #45526f;
+  font-size: 28px;
+  font-family: Georgia, "Times New Roman", serif;
+  color: var(--kc-text);
 }
 
 .list-wrap {
-  padding: 16px;
+  padding: 20px 20px 24px;
 }
 
 .list-head h3 {
   margin: 0;
-  font-size: 24px;
+  font-size: 22px;
+  font-family: Georgia, "Times New Roman", serif;
+  color: var(--kc-text);
 }
 
 .list-head p {
   margin: 6px 0 0;
-  color: #6a758f;
+  color: var(--kc-muted);
+  font-size: 14px;
 }
 
 .blog-grid {
-  margin-top: 14px;
-  height: calc(100vh - 285px);
-  overflow: auto;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  margin-top: 16px;
+  max-height: min(68vh, 820px);
+  overflow-y: auto;
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .blog-card {
-  border: 1px solid #e6ebf4;
-  border-radius: 10px;
+  border: 1px solid var(--kc-border-soft);
+  border-radius: 12px;
   overflow: hidden;
-  background: #fff;
-}
-
-.cover {
-  width: 100%;
-  height: 180px;
-  object-fit: cover;
+  background: var(--kc-card-elevated);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  padding: 12px 14px;
   cursor: pointer;
 }
 
-.content {
-  padding: 12px;
+.blog-card:hover {
+  box-shadow: var(--kc-shadow-soft);
+  transform: translateY(-2px);
 }
 
-h4 {
+.title {
   margin: 0;
-  line-height: 1.4;
-  cursor: pointer;
-  min-height: 44px;
+  line-height: 1.45;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--kc-text);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.reason {
-  margin-top: 8px;
+.time-line {
+  margin: 8px 0 0;
   font-size: 12px;
-  color: #687690;
-  background: #f4f7fc;
-  border-radius: 8px;
-  padding: 6px 8px;
+  color: var(--kc-muted);
 }
 
 .meta {
@@ -246,18 +222,18 @@ h4 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-}
-
 .author {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .author img {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
+  border: 1px solid var(--kc-border-soft);
 }
 
 .author span {
@@ -266,12 +242,44 @@ h4 {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
+  color: var(--kc-text);
+}
+
+.author.clickable {
+  cursor: pointer;
+}
+
+.author.clickable:hover span {
+  color: var(--el-color-primary);
+}
+
+.stats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.comment-stat {
+  font-size: 13px;
+  color: var(--kc-muted);
+  user-select: none;
 }
 
 .like-btn {
-  border: none;
-  background: transparent;
-  color: #d55555;
+  flex-shrink: 0;
+  border: 1px solid var(--kc-border-soft);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 13px;
+  background: var(--kc-card);
+  color: var(--kc-text);
   cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.like-btn:hover {
+  background: rgba(77, 92, 66, 0.12);
+  border-color: var(--kc-border);
 }
 </style>

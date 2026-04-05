@@ -4,10 +4,6 @@
       <h2>发布帖子</h2>
 
       <el-form label-width="90px" class="form-area">
-        <el-form-item label="标题">
-          <el-input v-model="form.title" maxlength="255" show-word-limit placeholder="请输入帖子标题" />
-        </el-form-item>
-
         <el-form-item label="正文" class="full-width-item">
           <div class="actions-row">
             <el-button size="small" :loading="imageUploading" @click="pickImage">上传图片</el-button>
@@ -74,7 +70,6 @@ defineProps({
 const maxContentLength = 2048;
 
 const form = reactive({
-  title: "",
   markdown: ""
 });
 
@@ -130,7 +125,7 @@ const onImageSelected = async (event) => {
   try {
     const fd = new FormData();
     fd.append("file", file);
-    const data = await http.post("/blog/upload", fd);
+    const data = await http.post("/blog/imag", fd);
     const url = unwrapUploadUrl(data);
     if (!url) {
       ElMessage.warning("未返回图片地址");
@@ -155,7 +150,7 @@ const onFileSelected = async (event) => {
   try {
     const fd = new FormData();
     fd.append("file", file);
-    const data = await http.post("/blog/file/upload", fd);
+    const data = await http.post("/blog/file", fd);
     const url = unwrapUploadUrl(data);
     if (!url) {
       ElMessage.warning("未返回文件地址");
@@ -171,10 +166,6 @@ const onFileSelected = async (event) => {
 };
 
 const submitPost = async () => {
-  if (!form.title.trim()) {
-    ElMessage.warning("标题不能为空");
-    return;
-  }
   const body = form.markdown.trim();
   if (!body) {
     ElMessage.warning("正文不能为空");
@@ -185,14 +176,32 @@ const submitPost = async () => {
     return;
   }
 
+  const lines = body.split(/\r?\n/);
+  const firstLine = (lines[0] || "").trim();
+  if (!firstLine) {
+    ElMessage.warning("首行不能为空，请填写标题行");
+    return;
+  }
+  const title = firstLine.startsWith("#")
+    ? firstLine.replace(/^#+\s*/, "").trim()
+    : firstLine;
+  if (!title) {
+    ElMessage.warning("标题解析失败，请检查首行格式");
+    return;
+  }
+  const content = lines.slice(1).join("\n").trim();
+  if (!content) {
+    ElMessage.warning("请在标题行下方填写正文内容");
+    return;
+  }
+
   submitting.value = true;
   try {
     await http.post("/blog", {
-      title: form.title.trim(),
-      content: body
+      title,
+      content
     });
     ElMessage.success("发布成功");
-    form.title = "";
     form.markdown = "";
     uploadedFiles.value = [];
   } catch (error) {

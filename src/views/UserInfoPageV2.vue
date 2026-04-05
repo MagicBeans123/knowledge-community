@@ -70,7 +70,7 @@ defineProps({
 
 const userStore = useUserStore();
 const router = useRouter();
-const defaultIcon = "/imgs/icons/default-icon.png";
+const defaultIcon = "/image/default.png";
 const profileReady = ref(false);
 
 const profile = computed(() => userStore.user || {});
@@ -80,9 +80,8 @@ const goEdit = () => {
 };
 
 const goPublicView = () => {
-  const id = profile.value?.id;
-  if (id == null) return;
-  router.push(`/community/other-info/${id}`);
+  // 当前用户“他人视角”统一走后端 /user/preview，不再从前端传 id
+  router.push("/community/other-info/me");
 };
 
 onMounted(async () => {

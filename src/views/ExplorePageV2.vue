@@ -20,7 +20,9 @@
           @click="goBlogDetail(blogItem.id)"
         >
           <h4 class="title">{{ blogItem.title }}</h4>
-          <p v-if="formatTime(blogItem.createTime)" class="time-line">{{ formatTime(blogItem.createTime) }}</p>
+          <p v-if="formatTime(blogItem.createTime || blogItem.updateTime)" class="time-line">
+            {{ formatTime(blogItem.createTime || blogItem.updateTime) }}
+          </p>
           <div class="meta">
             <div
               class="author"
@@ -28,7 +30,7 @@
               @click.stop="goAuthor(blogItem)"
             >
               <img :src="blogItem.icon || defaultIcon" alt="" />
-              <span>{{ blogItem.nickName || "匿名用户" }}</span>
+              <span>{{ blogItem.nickName || blogItem.name || "匿名用户" }}</span>
             </div>
             <div class="stats">
               <button type="button" class="like-btn" @click.stop="toggleLike(blogItem)">
@@ -62,7 +64,7 @@ const router = useRouter();
 const blogs = ref([]);
 const loading = ref(false);
 const hasMore = ref(true);
-const defaultIcon = "/imgs/icons/default-icon.png";
+const defaultIcon = "/image/default.png";
 
 /** 探索卡片展示用时间 */
 const formatTime = (t) => {
@@ -81,7 +83,7 @@ const filteredBlogs = computed(() => {
   if (!kw) return blogs.value;
   return blogs.value.filter((item) => {
     const title = (item.title || "").toLowerCase();
-    const author = (item.nickName || "").toLowerCase();
+    const author = (item.nickName || item.name || "").toLowerCase();
     return title.includes(kw) || author.includes(kw);
   });
 });
@@ -192,18 +194,19 @@ onMounted(async () => {
   max-height: min(68vh, 820px);
   overflow-y: auto;
   padding-right: 4px;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .blog-card {
   border: 1px solid var(--kc-border-soft);
   border-radius: 12px;
-  overflow: hidden;
+  overflow: visible;
   background: var(--kc-card-elevated);
   transition: box-shadow 0.2s ease, transform 0.2s ease;
-  padding: 14px 16px 16px;
+  padding: 16px 18px;
+  min-height: 112px;
   cursor: pointer;
 }
 
@@ -214,13 +217,12 @@ onMounted(async () => {
 
 .title {
   margin: 0;
-  line-height: 1.5;
-  min-height: 2.8em;
-  font-size: 16px;
+  line-height: 1.45;
+  font-size: 15px;
   font-weight: 600;
   color: var(--kc-text);
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -232,18 +234,18 @@ onMounted(async () => {
 }
 
 .meta {
-  margin-top: 10px;
+  margin-top: 12px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 14px;
+  flex-wrap: nowrap;
 }
 
 .stats {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex-shrink: 0;
 }
 
@@ -256,23 +258,25 @@ onMounted(async () => {
 .author {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  flex: 1;
   min-width: 0;
 }
 
 .author img {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: 1px solid var(--kc-border-soft);
+  flex-shrink: 0;
 }
 
 .author span {
-  max-width: 120px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--kc-text);
 }
 
@@ -288,7 +292,7 @@ onMounted(async () => {
   flex-shrink: 0;
   border: 1px solid var(--kc-border-soft);
   border-radius: 999px;
-  padding: 4px 10px;
+  padding: 5px 12px;
   font-size: 13px;
   background: var(--kc-card);
   color: var(--kc-text);
@@ -305,6 +309,16 @@ onMounted(async () => {
   .blog-grid {
     max-height: none;
     overflow: visible;
+  }
+
+  .meta {
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .stats {
+    width: 100%;
+    justify-content: flex-end;
   }
 }
 </style>

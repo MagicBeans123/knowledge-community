@@ -12,6 +12,11 @@
           <span v-if="errors.phone" class="err">{{ errors.phone }}</span>
         </div>
         <div class="field">
+          <label>密码</label>
+          <el-input v-model="password" show-password placeholder="请输入登录密码" @blur="checkPassword" />
+          <span v-if="errors.password" class="err">{{ errors.password }}</span>
+        </div>
+        <div class="field">
           <label>验证码</label>
           <div class="code-row">
             <el-input v-model="code" maxlength="6" placeholder="请输入验证码" />
@@ -35,12 +40,14 @@ import { ElMessage } from "element-plus";
 import http from "../api/http";
 
 const phone = ref("");
+const password = ref("");
 const code = ref("");
 const router = useRouter();
 const phoneRegex = /^1\d{10}$/;
 
 const errors = reactive({
   phone: "",
+  password: "",
   code: ""
 });
 
@@ -54,6 +61,14 @@ const checkPhone = () => {
     errors.phone = "";
   } else {
     errors.phone = "";
+  }
+};
+
+const checkPassword = () => {
+  if (!password.value.trim()) {
+    errors.password = "密码不能为空";
+  } else {
+    errors.password = "";
   }
 };
 
@@ -75,12 +90,17 @@ const sendCode = async () => {
     errors.phone = "请输入正确的11位手机号";
     return;
   }
-  await http.post("/user/code", null, { params: { phone: phone.value } });
-  ElMessage.success("验证码已发送");
+  try {
+    await http.post("/user/code", null, { params: { phone: phone.value } });
+    ElMessage.success("验证码已发送");
+  } catch (e) {
+    ElMessage.error(e.message || "发送失败");
+  }
 };
 
 const login = async () => {
   checkPhone();
+  checkPassword();
   checkCode();
 
   if (!phone.value.trim()) {
@@ -89,18 +109,31 @@ const login = async () => {
     errors.phone = "请输入正确的11位手机号";
   }
 
-  if (errors.phone || errors.code) {
+  if (!password.value.trim()) {
+    errors.password = "密码不能为空";
+  }
+
+  if (!code.value.trim()) {
+    errors.code = "验证码不能为空";
+  }
+
+  if (errors.phone || errors.password || errors.code) {
     ElMessage.warning("请修正表单中的错误");
     return;
   }
 
-  const data = await http.post("/user/login", {
-    phone: phone.value,
-    code: code.value
-  });
-  sessionStorage.setItem("token", data.token);
-  ElMessage.success("登录成功");
-  router.push("/community");
+  try {
+    const data = await http.post("/user/login", {
+      phone: phone.value.trim(),
+      password: password.value,
+      code: code.value.trim()
+    });
+    sessionStorage.setItem("token", data.token);
+    ElMessage.success("登录成功");
+    router.push("/community");
+  } catch (e) {
+    ElMessage.error(e.message || "登录失败");
+  }
 };
 </script>
 

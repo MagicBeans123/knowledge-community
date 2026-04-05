@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <section class="user-page" v-if="profileReady">
     <div class="hero card">
       <img class="avatar" :src="profile.icon || defaultIcon" alt="avatar" />
@@ -62,7 +62,7 @@ defineProps({
 
 const userStore = useUserStore();
 const router = useRouter();
-const defaultIcon = "/imgs/icons/default-icon.png";
+const defaultIcon = "/image/default.png";
 const profileReady = ref(false);
 
 const profile = computed(() => {

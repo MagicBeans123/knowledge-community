@@ -9,6 +9,17 @@
 const IMG_SRC_RE = /<img[^>]+src=["']([^"']+)["']/i;
 const MD_IMG_RE = /!\[[^\]]*\]\(\s*([^)\s]+)\s*\)/;
 
+function toDateOnly(value) {
+  if (!value) return "";
+  if (Array.isArray(value)) {
+    const [y, m, d] = value;
+    if (!y || !m || !d) return "";
+    return `${String(y)}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  }
+  if (typeof value === "string") return value.slice(0, 10);
+  return "";
+}
+
 export function firstImageSrcFromHtml(html) {
   if (!html || typeof html !== "string") return "";
   const m = html.match(IMG_SRC_RE);
@@ -84,7 +95,7 @@ export function normalizePublicUser(raw) {
     fans: info.fans ?? u.fans ?? 0,
     followee: info.followee ?? u.followee ?? 0,
     gender: info.gender ?? u.gender ?? 0,
-    birthday: info.birthday ?? u.birthday ?? "",
+    birthday: toDateOnly(info.birthday ?? u.birthday ?? ""),
     credits: info.credits ?? u.credits ?? 0,
     level: info.level ?? u.level ?? 0,
     createTime: u.createTime ?? u.create_time
@@ -107,7 +118,7 @@ export function normalizeCurrentUser(payload) {
     fans: merged.fans ?? 0,
     followee: merged.followee ?? 0,
     gender: merged.gender ?? 0,
-    birthday: merged.birthday ?? "",
+    birthday: toDateOnly(merged.birthday ?? ""),
     credits: merged.credits ?? 0,
     level: merged.level ?? 0,
     blogCount: payload?.blogCount ?? merged.blogCount ?? merged.blog_count ?? 0,

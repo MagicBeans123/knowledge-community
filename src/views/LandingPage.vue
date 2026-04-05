@@ -65,7 +65,23 @@ import { useRouter } from "vue-router";
 
 const router = useRouter();
 
-const toLogin = () => {
+const toLogin = async () => {
+  const raw = sessionStorage.getItem("token");
+  const token =
+    raw && raw !== "undefined" && raw !== "null" && raw.trim() !== "" ? raw : "";
+  try {
+    const resp = await fetch("/api/user/wantlogin", {
+      method: "GET",
+      headers: { authorization: token }
+    });
+    const redirectedTo = resp.url || "";
+    if (redirectedTo.includes("/community/info") || redirectedTo.includes("/user/me")) {
+      router.push("/community/info");
+      return;
+    }
+  } catch {
+    /* ignore */
+  }
   router.push("/login");
 };
 

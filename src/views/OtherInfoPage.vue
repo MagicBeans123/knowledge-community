@@ -1,12 +1,10 @@
 <template>
   <div v-if="user" class="wrap">
     <section class="card user-page">
-      <p v-if="isSelf" class="preview-banner">他人视角：这是你对外展示的样子（与访客看到的一致）</p>
       <div class="profile">
         <img :src="user.icon || defaultIcon" alt="avatar" />
         <div class="profile-main">
           <h2>{{ user.nickName || "用户" }}</h2>
-          <p class="uid">用户 ID：{{ user.id }}</p>
           <p v-if="user.city" class="muted">城市：{{ user.city }}</p>
           <p v-if="user.introduce" class="intro">{{ user.introduce }}</p>
           <div class="counts">
@@ -17,22 +15,41 @@
         <el-button v-if="!isSelf" type="primary" plain @click="toggleFollow">{{ followText }}</el-button>
       </div>
       <div class="quick-nav">
-        <router-link class="qn-link" :to="`/community/user/${targetId}/shops`">{{ shopLinkLabel }}</router-link>
-        <router-link class="qn-link" :to="`/community/user/${targetId}/blogs`">{{ blogLinkLabel }}</router-link>
+        <router-link class="qn-link" :to="`/community/user/${displayUserId}/shops`">{{ shopLinkLabel }}</router-link>
+        <router-link class="qn-link" :to="`/community/user/${displayUserId}/blogs`">{{ blogLinkLabel }}</router-link>
       </div>
     </section>
 
     <section class="card blog-box">
       <div class="blog-head">
         <h3>博客</h3>
-        <router-link class="all-link" :to="`/community/user/${targetId}/blogs`">全部</router-link>
+        <router-link class="all-link" :to="`/community/user/${displayUserId}/blogs`">全部</router-link>
       </div>
       <div v-if="blogsLoading" class="muted">加载中…</div>
-      <ul v-else-if="blogs.length" class="blog-ul">
-        <li v-for="b in blogs" :key="b.id" @click="goBlog(b.id)">
-          {{ b.title }}
-        </li>
-      </ul>
+      <div v-else-if="blogs.length" class="blog-scroll" @scroll="onBlogScroll">
+        <ul class="blog-ul">
+          <li v-for="b in blogs" :key="b.id" @click="goBlog(b.id)">
+            <div class="blog-row">
+              <div class="blog-main">
+                <p class="blog-title">{{ b.title || "无标题" }}</p>
+                <p class="blog-time" v-if="b.createTime">{{ String(b.createTime).slice(0, 10) }}</p>
+              </div>
+              <div class="blog-meta">
+                <div class="blog-author">
+                  <img :src="b.icon || user?.icon || defaultIcon" alt="author" />
+                  <span>{{ b.nickName || user?.nickName || "用户" }}</span>
+                </div>
+                <div class="blog-stats">
+                  <span>赞 {{ b.liked ?? 0 }}</span>
+                  <span>评 {{ b.comments ?? 0 }}</span>
+                </div>
+              </div>
+            </div>
+          </li>
+        </ul>
+        <p v-if="blogsLoadingMore" class="load-more">加载中…</p>
+        <p v-else-if="!blogsHasMore" class="load-more end">没有更多了</p>
+      </div>
       <p v-else class="muted">暂无</p>
     </section>
   </div>
@@ -68,25 +85,35 @@ const user = ref(null);
 const followed = ref(false);
 const blogs = ref([]);
 const blogsLoading = ref(false);
-const defaultIcon = "/imgs/icons/default-icon.png";
+const blogsLoadingMore = ref(false);
+const blogsHasMore = ref(true);
+const blogPage = ref(1);
+const defaultIcon = "/image/default.png";
 const targetId = props.id || route.params.id;
+const isPreviewMe = computed(() => String(targetId) === "me");
+const displayUserId = computed(() => (isPreviewMe.value ? String(user.value?.id ?? "") : String(targetId ?? "")));
 
 const followText = computed(() => (followed.value ? "取消关注" : "关注"));
 
 const isSelf = computed(() => {
+  if (isPreviewMe.value) return true;
   const mid = me.value?.id;
   if (mid == null || targetId == null || targetId === "") return false;
-  return Number(mid) === Number(targetId);
+  return String(mid) === String(targetId);
 });
 
 const shopLinkLabel = computed(() => (isSelf.value ? "我的商店" : "Ta 的商店"));
 const blogLinkLabel = computed(() => (isSelf.value ? "我的博客" : "Ta 的博客"));
 
 const fetchUser = async () => {
-  const raw = await http.get(`/user/${targetId}`);
+  const raw = isPreviewMe.value ? await http.get("/user/preview") : await http.get(`/user/${targetId}`);
   user.value = normalizePublicUser(raw);
-  const flag = await http.get(`/follow/or/not/${targetId}`);
-  followed.value = Boolean(flag);
+  if (!isPreviewMe.value) {
+    const flag = await http.get(`/follow/or/not/${targetId}`);
+    followed.value = Boolean(flag);
+  } else {
+    followed.value = false;
+  }
 };
 
 const goBlog = (id) => {
@@ -94,19 +121,52 @@ const goBlog = (id) => {
 };
 
 const loadBlogs = async () => {
-  blogsLoading.value = true;
+  if (blogsLoading.value || blogsLoadingMore.value || !blogsHasMore.value) return;
+  if (!blogs.value.length) blogsLoading.value = true;
+  else blogsLoadingMore.value = true;
   try {
-    const data = await http.get(`/blog/of/user/${targetId}?current=1`);
+    const uid = isPreviewMe.value ? user.value?.id : targetId;
+    if (!uid) {
+      blogs.value = [];
+      return;
+    }
+    const data = await http.get(`/blog/of/user/${uid}?current=${blogPage.value}`);
     const list = Array.isArray(data) ? data : [];
-    blogs.value = list.slice(0, 8).map((x) => normalizeBlogCard(x));
+    if (!list.length) {
+      blogsHasMore.value = false;
+      return;
+    }
+    blogs.value = blogs.value.concat(list.map((x) => normalizeBlogCard(x)));
+    if (list.length < 10) blogsHasMore.value = false;
   } catch {
     blogs.value = [];
   } finally {
     blogsLoading.value = false;
+    blogsLoadingMore.value = false;
+  }
+};
+
+const resetBlogsAndLoad = async () => {
+  blogPage.value = 1;
+  blogsHasMore.value = true;
+  blogs.value = [];
+  await loadBlogs();
+};
+
+const onBlogScroll = async (event) => {
+  const target = event.target;
+  if (target.scrollTop + target.clientHeight < target.scrollHeight - 20) return;
+  if (!blogsHasMore.value || blogsLoading.value || blogsLoadingMore.value) return;
+  blogPage.value += 1;
+  try {
+    await loadBlogs();
+  } catch {
+    blogPage.value -= 1;
   }
 };
 
 const toggleFollow = async () => {
+  if (isPreviewMe.value) return;
   await http.put(`/follow/${targetId}/${!followed.value}`);
   followed.value = !followed.value;
   ElMessage.success(followed.value ? "关注成功" : "已取消关注");
@@ -129,7 +189,7 @@ onMounted(async () => {
       }
     }
     await fetchUser();
-    await loadBlogs();
+    await resetBlogsAndLoad();
   } catch (error) {
     ElMessage.error(error.message);
   }
@@ -142,16 +202,6 @@ onMounted(async () => {
   border: 1px solid var(--kc-border);
   border-radius: 14px;
   box-shadow: var(--kc-shadow-soft);
-}
-
-.preview-banner {
-  margin: 0 0 14px;
-  padding: 10px 12px;
-  font-size: 13px;
-  color: var(--kc-muted);
-  background: rgba(77, 92, 66, 0.08);
-  border: 1px solid var(--kc-border-soft);
-  border-radius: 10px;
 }
 
 .quick-nav {
@@ -198,12 +248,6 @@ h2 {
   margin: 0 0 4px;
   font-family: Georgia, "Times New Roman", serif;
   color: var(--kc-text);
-}
-
-.uid {
-  margin: 0 0 6px;
-  color: var(--kc-muted);
-  font-size: 14px;
 }
 
 .muted {
@@ -264,11 +308,14 @@ h2 {
   padding: 0;
 }
 
+.blog-scroll {
+  max-height: min(62vh, 560px);
+  overflow-y: auto;
+}
+
 .blog-ul li {
-  padding: 10px 0;
+  padding: 14px 0;
   border-bottom: 1px solid var(--kc-border-soft);
-  font-size: 14px;
-  color: var(--kc-text);
   cursor: pointer;
 }
 
@@ -277,6 +324,83 @@ h2 {
 }
 
 .blog-ul li:hover {
-  color: var(--el-color-primary);
+  background: rgba(77, 92, 66, 0.05);
+}
+
+.blog-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+}
+
+.blog-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.blog-title {
+  margin: 0;
+  font-size: 15px;
+  color: var(--kc-text);
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.blog-time {
+  margin: 5px 0 0;
+  font-size: 12px;
+  color: var(--kc-muted);
+}
+
+.blog-meta {
+  display: grid;
+  gap: 6px;
+  flex-shrink: 0;
+  min-width: 170px;
+}
+
+.blog-author {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.blog-author img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--kc-border-soft);
+}
+
+.blog-author span {
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--kc-text);
+}
+
+.blog-stats {
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--kc-muted);
+}
+
+.load-more {
+  margin: 0;
+  padding: 10px 0 4px;
+  text-align: center;
+  color: var(--kc-muted);
+  font-size: 13px;
+}
+
+.load-more.end {
+  opacity: 0.85;
 }
 </style>
