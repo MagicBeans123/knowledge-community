@@ -38,7 +38,10 @@
             <p v-if="!uploadedFiles.length" class="uploaded-empty">暂无</p>
             <ul v-else class="uploaded-list">
               <li v-for="(f, i) in uploadedFiles" :key="i">
-                <span class="fname">{{ f.name }}</span>
+                <div class="frow">
+                  <span class="fname">{{ f.name }}</span>
+                  <el-button size="small" text type="danger" @click.stop="removeUploadedFile(i)">删除</el-button>
+                </div>
                 <code class="furl">{{ f.url }}</code>
               </li>
             </ul>
@@ -125,7 +128,7 @@ const onImageSelected = async (event) => {
   try {
     const fd = new FormData();
     fd.append("file", file);
-    const data = await http.post("/blog/imag", fd);
+    const data = await http.post("/blog/image/upload", fd);
     const url = unwrapUploadUrl(data);
     if (!url) {
       ElMessage.warning("未返回图片地址");
@@ -150,7 +153,7 @@ const onFileSelected = async (event) => {
   try {
     const fd = new FormData();
     fd.append("file", file);
-    const data = await http.post("/blog/file", fd);
+    const data = await http.post("/blog/file/upload", fd);
     const url = unwrapUploadUrl(data);
     if (!url) {
       ElMessage.warning("未返回文件地址");
@@ -163,6 +166,10 @@ const onFileSelected = async (event) => {
   } finally {
     fileUploading.value = false;
   }
+};
+
+const removeUploadedFile = (index) => {
+  uploadedFiles.value = uploadedFiles.value.filter((_, i) => i !== index);
 };
 
 const submitPost = async () => {
@@ -197,9 +204,13 @@ const submitPost = async () => {
 
   submitting.value = true;
   try {
+    const fileUrls = uploadedFiles.value
+      .map((x) => (x?.url || "").trim())
+      .filter(Boolean);
     await http.post("/blog", {
       title,
-      content
+      content,
+      file: fileUrls.join(",")
     });
     ElMessage.success("发布成功");
     form.markdown = "";
@@ -407,6 +418,13 @@ h2 {
   border-radius: 8px;
   background: rgba(77, 92, 66, 0.05);
   border: 1px solid var(--kc-border-soft);
+}
+
+.frow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
 }
 
 .fname {

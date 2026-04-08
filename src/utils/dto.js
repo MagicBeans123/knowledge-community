@@ -47,6 +47,7 @@ export function normalizeBlogCard(raw) {
     ...r,
     nickName,
     cover,
+    file: r.file ?? r.files ?? "",
     liked: r.liked ?? 0,
     comments: r.comments ?? 0,
     isCommit: r.isCommit ?? r.is_commit,
@@ -134,13 +135,15 @@ export function normalizeShop(raw) {
   return {
     ...s,
     userId: s.userId ?? s.user_id,
+    ownerNickName: s.ownerNickName ?? s.owner_nick_name ?? s.nickName ?? s.nick_name ?? "",
+    ownerEmail: s.ownerEmail ?? s.owner_email ?? s.email ?? "",
+    ownerIcon: s.ownerIcon ?? s.owner_icon ?? s.icon ?? "",
     typeId: s.typeId ?? s.type_id,
-    avgPrice: s.avgPrice ?? s.avg_price,
-    openHours: s.openHours ?? s.open_hours,
+    images: imgs.join(","),
+    imageList: imgs,
     createTime: s.createTime ?? s.create_time,
     updateTime: s.updateTime ?? s.update_time,
     sold: s.sold ?? 0,
-    comments: s.comments ?? 0,
     score: s.score ?? 0,
     cover: s.cover || imgs[0] || ""
   };
@@ -157,6 +160,27 @@ export function normalizeVoucher(raw) {
     actualValue: v.actualValue ?? v.actual_value,
     createTime: v.createTime ?? v.create_time,
     updateTime: v.updateTime ?? v.update_time
+  };
+}
+
+/** know_goods + know_seckill_goods */
+export function normalizeGoods(raw) {
+  const g = raw || {};
+  const imgs = g.images ? String(g.images).split(",").map((x) => x.trim()).filter(Boolean) : [];
+  return {
+    ...g,
+    shopId: g.shopId ?? g.shop_id,
+    images: imgs.join(","),
+    imageList: imgs,
+    payValue: g.payValue ?? g.pay_value ?? 0,
+    actualValue: g.actualValue ?? g.actual_value ?? 0,
+    beginTime: g.beginTime ?? g.begin_time,
+    endTime: g.endTime ?? g.end_time,
+    stock: g.stock ?? 0,
+    type: g.type ?? 0,
+    status: g.status ?? 0,
+    createTime: g.createTime ?? g.create_time,
+    updateTime: g.updateTime ?? g.update_time
   };
 }
 

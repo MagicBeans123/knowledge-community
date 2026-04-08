@@ -17,7 +17,7 @@
           <h4 class="title">{{ blogItem.title }}</h4>
           <p v-if="formatTime(blogItem.createTime)" class="time-line">{{ formatTime(blogItem.createTime) }}</p>
           <div class="meta">
-            <div class="author" :class="{ clickable: Boolean(blogItem.userId) }" @click.stop="goAuthor(blogItem)">
+            <div class="author">
               <img :src="blogItem.icon || defaultIcon" alt="avatar" />
               <span>{{ blogItem.nickName || "匿名用户" }}</span>
             </div>
@@ -106,11 +106,6 @@ const toggleLike = async (blogItem) => {
 
 const goBlogDetail = (blogId) => {
   router.push(`/community/blog/${blogId}`);
-};
-
-const goAuthor = (blogItem) => {
-  if (!blogItem.userId) return;
-  router.push(`/community/other-info/${blogItem.userId}`);
 };
 
 const onScroll = async (event) => {

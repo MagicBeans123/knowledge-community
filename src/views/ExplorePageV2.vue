@@ -7,8 +7,12 @@
     <section class="list-wrap card">
       <div class="list-head">
         <div>
-          <h3>推荐博客</h3>
+          <h3>{{ activeTab === "hot" ? "推荐博客" : "关注动态" }}</h3>
           <p>共 {{ filteredBlogs.length }} 篇内容</p>
+        </div>
+        <div class="tab-switch">
+          <button class="tab-btn" :class="{ active: activeTab === 'hot' }" @click="switchTab('hot')">推荐</button>
+          <button class="tab-btn" :class="{ active: activeTab === 'follow' }" @click="switchTab('follow')">查看动态</button>
         </div>
       </div>
 
@@ -24,11 +28,7 @@
             {{ formatTime(blogItem.createTime || blogItem.updateTime) }}
           </p>
           <div class="meta">
-            <div
-              class="author"
-              :class="{ clickable: Boolean(blogItem.userId) }"
-              @click.stop="goAuthor(blogItem)"
-            >
+            <div class="author">
               <img :src="blogItem.icon || defaultIcon" alt="" />
               <span>{{ blogItem.nickName || blogItem.name || "匿名用户" }}</span>
             </div>
@@ -64,6 +64,9 @@ const router = useRouter();
 const blogs = ref([]);
 const loading = ref(false);
 const hasMore = ref(true);
+const activeTab = ref("hot");
+const followCursorSeconds = ref(Math.floor(Date.now() / 1000));
+const followOffset = ref(0);
 const defaultIcon = "/image/default.png";
 
 /** 探索卡片展示用时间 */
@@ -92,8 +95,20 @@ const fetchBlogs = async () => {
   if (loading.value || !hasMore.value) return;
   loading.value = true;
   try {
-    const data = await http.get("/blog/hot");
-    const list = Array.isArray(data) ? data : [];
+    const data =
+      activeTab.value === "hot"
+        ? await http.get("/blog/hot")
+        : await http.get(`/blog/follows?seconds=${followCursorSeconds.value}&offset=${followOffset.value}`);
+
+    let list = [];
+    let nextSeconds = 0;
+    if (Array.isArray(data)) {
+      list = data;
+    } else if (data && typeof data === "object") {
+      list = Array.isArray(data.list) ? data.list : Array.isArray(data.records) ? data.records : [];
+      nextSeconds = Number(data.seconds ?? data.nextSeconds ?? data.cursor ?? 0) || 0;
+    }
+
     const mapped = list.map((item) => normalizeBlogCard(item));
     if (!mapped.length) {
       hasMore.value = false;
@@ -101,8 +116,29 @@ const fetchBlogs = async () => {
     }
     const exists = new Set(blogs.value.map((x) => x.id));
     blogs.value = blogs.value.concat(mapped.filter((x) => !exists.has(x.id)));
+
+    if (activeTab.value === "follow") {
+      if (nextSeconds > 0) followCursorSeconds.value = nextSeconds;
+      followOffset.value = 1;
+    }
   } finally {
     loading.value = false;
+  }
+};
+
+const switchTab = async (tab) => {
+  if (activeTab.value === tab) return;
+  activeTab.value = tab;
+  blogs.value = [];
+  hasMore.value = true;
+  if (tab === "follow") {
+    followCursorSeconds.value = Math.floor(Date.now() / 1000);
+    followOffset.value = 0;
+  }
+  try {
+    await fetchBlogs();
+  } catch (error) {
+    ElMessage.error(error.message || "加载失败");
   }
 };
 
@@ -121,11 +157,6 @@ const toggleLike = async (blogItem) => {
 
 const goBlogDetail = (blogId) => {
   router.push(`/community/blog/${blogId}`);
-};
-
-const goAuthor = (blogItem) => {
-  if (!blogItem.userId) return;
-  router.push(`/community/other-info/${blogItem.userId}`);
 };
 
 const onScroll = async (event) => {
@@ -187,6 +218,33 @@ onMounted(async () => {
   margin: 6px 0 0;
   color: var(--kc-muted);
   font-size: 14px;
+}
+
+.list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tab-switch {
+  display: flex;
+  gap: 8px;
+}
+
+.tab-btn {
+  border: 1px solid var(--kc-border-soft);
+  border-radius: 999px;
+  background: var(--kc-card);
+  color: var(--kc-text);
+  font-size: 13px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.tab-btn.active {
+  background: rgba(77, 92, 66, 0.12);
+  border-color: var(--kc-border);
 }
 
 .blog-grid {

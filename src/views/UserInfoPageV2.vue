@@ -9,6 +9,8 @@
       </div>
       <div class="hero-actions">
         <span class="gender-tag">{{ genderLabel(profile.gender) }}</span>
+        <el-button v-if="profile.id != null" plain @click="goMyShops">我的商店</el-button>
+        <el-button plain @click="goShopSquare">商店广场</el-button>
         <el-button v-if="profile.id != null" plain @click="goPublicView">他人视角</el-button>
         <el-button type="primary" @click="goEdit">修改资料</el-button>
       </div>
@@ -82,6 +84,15 @@ const goEdit = () => {
 const goPublicView = () => {
   // 当前用户“他人视角”统一走后端 /user/preview，不再从前端传 id
   router.push("/community/other-info/me");
+};
+
+const goMyShops = () => {
+  if (profile.value?.id == null) return;
+  router.push(`/community/user/${profile.value.id}/shops`);
+};
+
+const goShopSquare = () => {
+  router.push("/community/shops");
 };
 
 onMounted(async () => {

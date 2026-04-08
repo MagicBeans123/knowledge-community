@@ -9,8 +9,9 @@
         v-model="activeTypeId"
         class="type-select"
         placeholder="分类"
-        @change="loadShops"
+        @change="resetAndLoad"
       >
+        <el-option label="全部" value="" />
         <el-option v-for="t in types" :key="t.id" :label="t.name || `分类${t.id}`" :value="t.id" />
       </el-select>
       </div>
@@ -19,21 +20,27 @@
     <section class="list card">
       <div v-if="loading" class="state">加载中…</div>
       <div v-else-if="!shops.length" class="state muted">暂无商户</div>
-      <div v-else class="grid">
-        <article v-for="s in shops" :key="s.id" class="shop-card" @click="goDetail(s.id)">
-          <div class="cover-wrap">
-            <img v-if="s.cover" class="cover" :src="s.cover" :alt="s.name" loading="lazy" />
-            <div v-else class="cover ph" aria-hidden="true" />
-          </div>
-          <div class="body">
-            <h3>{{ s.name }}</h3>
-            <p class="addr">{{ s.area || s.address }}</p>
-            <div class="row">
-              <span>评分 {{ s.score ?? "—" }}</span>
-              <span v-if="s.avgPrice != null">人均 ¥{{ s.avgPrice }}</span>
+      <div v-else>
+        <div class="grid">
+          <article v-for="s in shops" :key="s.id" class="shop-card" @click="goDetail(s.id)">
+            <div class="cover-wrap">
+              <img v-if="s.cover" class="cover" :src="s.cover" :alt="s.name" loading="lazy" />
+              <div v-else class="cover ph" aria-hidden="true" />
             </div>
-          </div>
-        </article>
+            <div class="body">
+              <h3>{{ s.name }}</h3>
+              <p class="addr">{{ s.address }}</p>
+              <div class="row">
+                <span>评分 {{ s.score ?? "—" }}</span>
+                <span>销量 {{ s.sold ?? 0 }}</span>
+              </div>
+            </div>
+          </article>
+        </div>
+        <div class="pager">
+          <el-button v-if="hasMore" :loading="loadingMore" @click="loadMore">加载更多</el-button>
+          <span v-else class="muted">没有更多了</span>
+        </div>
       </div>
     </section>
   </div>
@@ -52,24 +59,53 @@ defineProps({
 
 const router = useRouter();
 const types = ref([]);
-const activeTypeId = ref(null);
+const activeTypeId = ref("");
 const shops = ref([]);
 const loading = ref(true);
+const loadingMore = ref(false);
+const hasMore = ref(true);
+const current = ref(1);
+const size = 10;
 
 const loadShops = async () => {
-  loading.value = true;
+  const firstPage = current.value === 1;
+  if (firstPage) loading.value = true;
+  else loadingMore.value = true;
   try {
-    const data =
-      activeTypeId.value != null
-        ? await http.get(`/shop/of/type/${activeTypeId.value}`)
-        : await http.get("/shop/hot");
-    shops.value = (Array.isArray(data) ? data : []).map((x) => normalizeShop(x));
+    // 默认“全部”：不按类型过滤；选择类型后再按类型分页查询
+    if (activeTypeId.value === "") {
+      const data = await http.get("/shop/hot");
+      const list = (Array.isArray(data) ? data : []).map((x) => normalizeShop(x));
+      shops.value = list;
+      hasMore.value = false;
+    } else {
+      const data = await http.get(`/shop/of/type/${activeTypeId.value}?current=${current.value}&size=${size}`);
+      const list = (Array.isArray(data) ? data : []).map((x) => normalizeShop(x));
+      if (firstPage) shops.value = list;
+      else shops.value = shops.value.concat(list);
+      hasMore.value = list.length >= size;
+    }
   } catch (e) {
     ElMessage.error(e.message || "加载失败");
-    shops.value = [];
+    if (firstPage) shops.value = [];
+    hasMore.value = false;
   } finally {
     loading.value = false;
+    loadingMore.value = false;
   }
+};
+
+const resetAndLoad = async () => {
+  current.value = 1;
+  hasMore.value = true;
+  shops.value = [];
+  await loadShops();
+};
+
+const loadMore = async () => {
+  if (!hasMore.value || loadingMore.value || loading.value) return;
+  current.value += 1;
+  await loadShops();
 };
 
 const goDetail = (id) => {
@@ -86,13 +122,10 @@ onMounted(async () => {
     try {
       const data = await http.get("/type/list");
       types.value = Array.isArray(data) ? data : [];
-      if (types.value.length) {
-        activeTypeId.value = types.value[0].id;
-      }
     } catch {
       types.value = [];
     }
-    await loadShops();
+    await resetAndLoad();
   } catch (e) {
     ElMessage.error(e.message || "加载失败");
   }
@@ -153,6 +186,12 @@ onMounted(async () => {
 
 .state.muted {
   color: var(--kc-muted);
+}
+
+.pager {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
 }
 
 .grid {

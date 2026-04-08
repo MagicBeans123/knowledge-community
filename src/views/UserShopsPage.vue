@@ -22,10 +22,10 @@
           </div>
           <div class="body">
             <h3>{{ s.name }}</h3>
-            <p class="addr">{{ s.area || s.address }}</p>
+            <p class="addr">{{ s.address }}</p>
             <div class="row">
               <span>评分 {{ s.score ?? "—" }}</span>
-              <span v-if="s.avgPrice != null">人均 ¥{{ s.avgPrice }}</span>
+              <span>销量 {{ s.sold ?? 0 }}</span>
             </div>
           </div>
         </article>

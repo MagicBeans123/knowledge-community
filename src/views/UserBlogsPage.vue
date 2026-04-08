@@ -13,16 +13,23 @@
 
     <section class="card list">
       <div v-if="initialLoading" class="muted">加载中…</div>
-      <div v-else-if="!blogs.length" class="muted">暂无博客</div>
       <div v-else class="list-scroll" @scroll="onScroll">
         <ul class="items">
           <li v-for="b in blogs" :key="b.id" @click="goBlog(b.id)">
-            <span class="t">{{ b.title }}</span>
-            <span class="d">{{ formatDate(b.createTime) }}</span>
+            <div class="main">
+              <span class="t">{{ b.title }}</span>
+              <span class="d">{{ formatDate(b.createTime) }}</span>
+            </div>
+            <div class="stats">
+              <span>赞 {{ b.liked ?? 0 }}</span>
+              <span>评 {{ b.comments ?? 0 }}</span>
+            </div>
           </li>
         </ul>
-        <p v-if="loadingMore" class="load-more">加载中…</p>
-        <p v-else-if="!hasMore && blogs.length" class="load-more end">没有更多了</p>
+        <p v-if="!blogs.length && !loadingMore && !hasMore" class="load-more end">没有更多了</p>
+        <p v-else-if="!blogs.length" class="load-more end">暂无博客</p>
+        <p v-else-if="loadingMore" class="load-more">加载中…</p>
+        <p v-else-if="!hasMore" class="load-more end">没有更多了</p>
       </div>
     </section>
   </div>
@@ -44,13 +51,35 @@ const route = useRoute();
 const router = useRouter();
 const uid = computed(() => String(props.userId || route.params.userId || ""));
 
-const page = ref(1);
+const cursorSeconds = ref(0);
+const cursorBlogId = ref(0);
 const hasMore = ref(true);
 const loading = ref(false);
 const initialLoading = ref(true);
 const loadingMore = ref(false);
 const blogs = ref([]);
 const nickName = ref("");
+
+function parseCursorPayload(payload) {
+  if (Array.isArray(payload)) {
+    return { list: payload, nextSeconds: 0 };
+  }
+  const p = payload && typeof payload === "object" ? payload : {};
+  const list = Array.isArray(p.list) ? p.list : Array.isArray(p.records) ? p.records : Array.isArray(p.items) ? p.items : [];
+  const nextSeconds = Number(p.seconds ?? p.nextSeconds ?? p.cursor ?? 0) || 0;
+  return { list, nextSeconds };
+}
+
+function toSeconds(value) {
+  if (!value) return 0;
+  if (Array.isArray(value)) {
+    const [y, m, d, hh = 0, mm = 0, ss = 0] = value;
+    const ts = new Date(Number(y), Number(m) - 1, Number(d), Number(hh), Number(mm), Number(ss)).getTime();
+    return Number.isFinite(ts) ? Math.floor(ts / 1000) : 0;
+  }
+  const ts = new Date(value).getTime();
+  return Number.isFinite(ts) ? Math.floor(ts / 1000) : 0;
+}
 
 const formatDate = (t) => {
   if (!t) return "";
@@ -76,11 +105,24 @@ const fetchBlogs = async () => {
   loading.value = true;
   if (blogs.value.length) loadingMore.value = true;
   try {
-    const data = await http.get(`/blog/of/user/${uid.value}?current=${page.value}`);
-    const list = Array.isArray(data) ? data : [];
+    /** 与关注动态/评论一致：首次 offset=0，之后固定 1；后端参数名为 seconds、offset */
+    const offset = blogs.value.length === 0 ? 0 : 1;
+    const data = await http.get(
+      `/blog/of/user/${uid.value}?seconds=${cursorSeconds.value}&offset=${offset}`
+    );
+    const { list, nextSeconds } = parseCursorPayload(data);
     const mapped = list.map((x) => normalizeBlogCard(x));
     blogs.value = blogs.value.concat(mapped);
-    if (!list.length) hasMore.value = false;
+    if (!list.length && nextSeconds === 0) {
+      hasMore.value = false;
+    } else if (!list.length) {
+      hasMore.value = false;
+    }
+    if (mapped.length) {
+      const tail = mapped[mapped.length - 1];
+      cursorBlogId.value = Number(tail.id || 0);
+      cursorSeconds.value = nextSeconds > 0 ? nextSeconds : toSeconds(tail.createTime || tail.updateTime);
+    }
   } catch (e) {
     ElMessage.error(e.message || "加载失败");
     throw e;
@@ -92,7 +134,9 @@ const fetchBlogs = async () => {
 };
 
 const resetAndLoad = async () => {
-  page.value = 1;
+  // 首次请求要求 seconds 为当前秒数
+  cursorSeconds.value = Math.floor(Date.now() / 1000);
+  cursorBlogId.value = 0;
   hasMore.value = true;
   blogs.value = [];
   initialLoading.value = true;
@@ -104,12 +148,9 @@ const onScroll = async (event) => {
   const target = event.target;
   if (target.scrollTop + target.clientHeight < target.scrollHeight - 20) return;
   if (!hasMore.value || loading.value) return;
-  page.value += 1;
   try {
     await fetchBlogs();
-  } catch {
-    page.value -= 1;
-  }
+  } catch {}
 };
 
 onMounted(() => resetAndLoad());
@@ -225,6 +266,14 @@ watch(
   color: var(--kc-text);
 }
 
+.main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .items li:last-child {
   border-bottom: none;
 }
@@ -242,6 +291,14 @@ watch(
 }
 
 .d {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--kc-muted);
+}
+
+.stats {
+  display: flex;
+  gap: 10px;
   flex-shrink: 0;
   font-size: 13px;
   color: var(--kc-muted);
