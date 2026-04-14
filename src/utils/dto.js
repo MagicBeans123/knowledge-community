@@ -178,6 +178,7 @@ export function normalizeGoods(raw) {
     endTime: g.endTime ?? g.end_time,
     stock: g.stock ?? 0,
     type: g.type ?? 0,
+    out: Boolean(g.out ?? false),
     status: g.status ?? 0,
     createTime: g.createTime ?? g.create_time,
     updateTime: g.updateTime ?? g.update_time

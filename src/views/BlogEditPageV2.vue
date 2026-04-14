@@ -10,17 +10,18 @@
             <el-button size="small" :loading="fileUploading" @click="pickFile">上传文件</el-button>
             <span class="tip">{{ contentLength }} / {{ maxContentLength }} 字</span>
           </div>
-          <textarea
-            ref="textareaRef"
-            v-model="form.markdown"
-            class="md-input"
-            spellcheck="false"
-            placeholder="在此编写 Markdown…"
-          ></textarea>
+          <div class="editor-preview-grid">
+            <textarea
+              ref="textareaRef"
+              v-model="form.markdown"
+              class="md-input"
+              spellcheck="false"
+              placeholder="在此编写 Markdown…"
+            ></textarea>
 
-          <div class="preview-wrap">
-            <div class="preview-label">预览</div>
-            <div class="md-preview markdown-body" v-html="previewHtml"></div>
+            <div class="preview-wrap">
+              <div class="md-preview markdown-body" v-html="previewHtml"></div>
+            </div>
           </div>
 
           <input
@@ -225,9 +226,9 @@ const submitPost = async () => {
 
 <style scoped>
 .editor-wrap {
-  padding: 8px 0 24px;
+  padding: 0 0 10px;
   width: 100%;
-  max-width: min(1280px, 98vw);
+  max-width: 100vw;
   margin: 0 auto;
 }
 
@@ -236,7 +237,7 @@ const submitPost = async () => {
   background: var(--kc-card);
   border: 1px solid var(--kc-border);
   border-radius: 14px;
-  padding: 28px 32px 36px;
+  padding: 12px 12px 14px;
   box-shadow: var(--kc-shadow);
 }
 
@@ -248,7 +249,7 @@ h2 {
 }
 
 .form-area {
-  margin-top: 24px;
+  margin-top: 12px;
 }
 
 .form-area :deep(.el-form-item__label) {
@@ -277,7 +278,7 @@ h2 {
 .md-input {
   display: block;
   width: 100%;
-  min-height: min(42vh, 480px);
+  min-height: 70vh;
   padding: 16px 18px;
   border: 1px solid var(--kc-border-soft);
   border-radius: 12px;
@@ -291,32 +292,28 @@ h2 {
   box-sizing: border-box;
 }
 
+.editor-preview-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  align-items: stretch;
+}
+
 .md-input:focus {
   border-color: var(--kc-border);
   box-shadow: 0 0 0 1px rgba(77, 92, 66, 0.2);
 }
 
 .preview-wrap {
-  margin-top: 14px;
   border: 1px solid var(--kc-border-soft);
   border-radius: 12px;
-  overflow: hidden;
+  overflow: auto;
   background: rgba(255, 253, 247, 0.7);
 }
 
-.preview-label {
-  padding: 8px 14px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  color: var(--kc-muted);
-  background: rgba(77, 92, 66, 0.06);
-  border-bottom: 1px solid var(--kc-border-soft);
-}
-
 .md-preview {
-  min-height: 200px;
-  max-height: min(40vh, 440px);
+  min-height: 70vh;
+  max-height: 70vh;
   overflow: auto;
   padding: 16px 18px 20px;
   font-size: 15px;
@@ -445,6 +442,16 @@ h2 {
 }
 
 @media (max-width: 768px) {
+  .editor-preview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .md-input,
+  .md-preview {
+    min-height: 50vh;
+    max-height: 50vh;
+  }
+
   .tip {
     margin-left: 0;
     width: 100%;

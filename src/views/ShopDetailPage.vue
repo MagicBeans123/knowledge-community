@@ -56,12 +56,13 @@
         </div>
       </div>
       <div v-if="goodsLoading" class="muted">加载中…</div>
-      <ul v-else-if="filteredGoodsList.length" class="v-list">
-        <li v-for="g in filteredGoodsList" :key="g.id" class="v-item">
+      <ul v-else-if="visibleGoodsList.length" class="v-list">
+        <li v-for="g in visibleGoodsList" :key="g.id" class="v-item">
           <div>
             <strong>
               {{ g.title }}
               <span v-if="Number(g.type) === 1" class="seckill-tag">秒杀</span>
+              <span v-if="Number(g.type) === 1 && g.out" class="expired-tag">已过期</span>
             </strong>
             <p v-if="g.description" class="sub">{{ g.description }}</p>
             <div v-if="g.imageList?.length" class="goods-img-row">
@@ -74,10 +75,23 @@
           <div class="price">
             <span class="pay">¥{{ g.payValue }}</span>
             <span class="actual">抵 ¥{{ g.actualValue }}</span>
+            <el-button size="small" @click="goGoodsDetail(g)">详情</el-button>
           </div>
         </li>
       </ul>
       <p v-else class="muted">暂无商品</p>
+      <el-pagination
+        v-if="!goodsLoading && goodsTotal > 0"
+        class="pager"
+        background
+        layout="total, sizes, prev, pager, next"
+        :total="goodsPagerTotal"
+        :current-page="goodsCurrent"
+        :page-size="goodsSize"
+        :page-sizes="[5, 10, 20, 30]"
+        @current-change="onGoodsPageChange"
+        @size-change="onGoodsSizeChange"
+      />
     </section>
 
     <el-dialog v-model="publishDialogVisible" title="发布商品" width="560px">
@@ -159,7 +173,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { storeToRefs } from "pinia";
@@ -180,7 +194,12 @@ const { user: me } = storeToRefs(userStore);
 const shop = ref(null);
 const shopLoading = ref(true);
 const goodsList = ref([]);
+const allGoodsList = ref([]);
 const goodsLoading = ref(true);
+const goodsCurrent = ref(1);
+const goodsSize = ref(10);
+const goodsTotal = ref(0);
+const localGoodsPaging = ref(false);
 const followedOwner = ref(false);
 const followLoading = ref(false);
 const publishDialogVisible = ref(false);
@@ -221,10 +240,14 @@ const isShopOwner = computed(() => {
 });
 
 const followOwnerText = computed(() => (followedOwner.value ? "取消关注店主" : "关注店主"));
-const filteredGoodsList = computed(() => {
-  if (goodsTypeFilter.value === "all") return goodsList.value;
-  return goodsList.value.filter((g) => String(g.type ?? 0) === String(goodsTypeFilter.value));
+const selectedGoodsType = computed(() => (goodsTypeFilter.value === "all" ? null : Number(goodsTypeFilter.value)));
+const filteredGoodsList = computed(() => (localGoodsPaging.value ? allGoodsList.value : goodsList.value));
+const visibleGoodsList = computed(() => {
+  if (!localGoodsPaging.value) return filteredGoodsList.value;
+  const start = (goodsCurrent.value - 1) * goodsSize.value;
+  return filteredGoodsList.value.slice(start, start + goodsSize.value);
 });
+const goodsPagerTotal = computed(() => (localGoodsPaging.value ? filteredGoodsList.value.length : goodsTotal.value));
 
 const load = async () => {
   shopLoading.value = true;
@@ -266,16 +289,70 @@ const toggleFollowOwner = async () => {
   }
 };
 
-const loadGoods = async () => {
+const loadGoods = async (page = goodsCurrent.value, size = goodsSize.value) => {
   goodsLoading.value = true;
   try {
-    const data = await http.get(`/goods/of/shop/${shopId}`);
-    goodsList.value = (Array.isArray(data) ? data : []).map((x) => normalizeGoods(x));
+    const query = new URLSearchParams();
+    query.set("current", String(page));
+    query.set("size", String(size));
+    if (selectedGoodsType.value !== null && Number.isFinite(selectedGoodsType.value)) {
+      query.set("type", String(selectedGoodsType.value));
+    }
+    const data = await http.get(`/goods/of/shop/${shopId}?${query.toString()}`);
+    if (Array.isArray(data)) {
+      localGoodsPaging.value = false;
+      const records = data.map((x) => normalizeGoods(x));
+      goodsList.value = records;
+      allGoodsList.value = [];
+      goodsCurrent.value = Number(page) || 1;
+      goodsSize.value = Number(size) || 10;
+      // 后端仅返回当前页列表时，使用“伪总数”让 next 可点击继续请求下一页
+      const base = (goodsCurrent.value - 1) * goodsSize.value;
+      goodsTotal.value = base + records.length + (records.length >= goodsSize.value ? 1 : 0);
+      return;
+    }
+    localGoodsPaging.value = false;
+    const records = Array.isArray(data?.records) ? data.records : [];
+    goodsList.value = records.map((x) => normalizeGoods(x));
+    allGoodsList.value = [];
+    goodsCurrent.value = Number(data?.current ?? page) || page;
+    goodsSize.value = Number(data?.size ?? size) || size;
+    goodsTotal.value = Number(data?.total ?? records.length) || 0;
   } catch {
     goodsList.value = [];
+    allGoodsList.value = [];
+    goodsTotal.value = 0;
   } finally {
     goodsLoading.value = false;
   }
+};
+
+const onGoodsPageChange = async (page) => {
+  goodsCurrent.value = page;
+  if (localGoodsPaging.value) {
+    return;
+  }
+  await loadGoods(page, goodsSize.value);
+};
+
+const onGoodsSizeChange = async (size) => {
+  goodsSize.value = size;
+  goodsCurrent.value = 1;
+  if (localGoodsPaging.value) {
+    return;
+  }
+  await loadGoods(1, size);
+};
+
+watch(goodsTypeFilter, async () => {
+  goodsCurrent.value = 1;
+  await loadGoods(1, goodsSize.value);
+});
+
+const goGoodsDetail = (goods) => {
+  if (!goods?.id) return;
+  const type = Number(goods.type) === 1 ? 1 : 0;
+  router.push(`/community/goods/${goods.id}?type=${type}`);
 };
 
 function unwrapUploadUrl(data) {
@@ -409,7 +486,7 @@ onMounted(async () => {
   await load();
   if (shop.value) {
     await loadFollowStatus();
-    await loadGoods();
+    await loadGoods(goodsCurrent.value, goodsSize.value);
   }
 });
 </script>
@@ -658,6 +735,11 @@ onMounted(async () => {
   color: var(--kc-muted);
 }
 
+.pager {
+  margin-top: 14px;
+  justify-content: flex-end;
+}
+
 .v-list {
   list-style: none;
   margin: 0;
@@ -690,6 +772,17 @@ onMounted(async () => {
   color: #b54708;
   background: #fff3e6;
   border: 1px solid #ffd8a8;
+}
+
+.expired-tag {
+  margin-left: 8px;
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: #b42318;
+  background: #fee4e2;
+  border: 1px solid #fecdca;
 }
 
 .sub,

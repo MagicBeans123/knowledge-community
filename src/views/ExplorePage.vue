@@ -97,11 +97,10 @@ const fetchBlogs = async () => {
 
 const toggleLike = async (blogItem) => {
   await http.put(`/blog/like/${blogItem.id}`);
-  const latest = await http.get(`/blog/${blogItem.id}`);
-  const n = normalizeBlogCard(latest);
-  blogItem.liked = n.liked;
-  blogItem.comments = n.comments;
-  blogItem.isLike = n.isLike;
+  const hadLiked = Boolean(blogItem.isLike);
+  blogItem.isLike = !hadLiked;
+  const nextLiked = Number(blogItem.liked || 0) + (hadLiked ? -1 : 1);
+  blogItem.liked = Math.max(0, nextLiked);
 };
 
 const goBlogDetail = (blogId) => {

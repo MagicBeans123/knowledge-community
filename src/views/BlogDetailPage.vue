@@ -655,15 +655,11 @@ const toggleLike = async () => {
   likeLoading.value = true;
   try {
     await http.put(`/blog/like/${blogId}`);
-    const latestRaw = await http.get(`/blog/${blogId}`);
-    const latest = normalizeBlogDetail(latestRaw);
-    if (latest) {
-      const prevContent = blog.value?.content;
-      blog.value = { ...(blog.value || {}), ...latest };
-      if (latest.content !== prevContent) {
-        await resolveContent(latest);
-      }
-    }
+    const hadLiked = Boolean(blog.value?.isLike);
+    if (!blog.value) blog.value = {};
+    blog.value.isLike = !hadLiked;
+    const nextLiked = Number(blog.value.liked || 0) + (hadLiked ? -1 : 1);
+    blog.value.liked = Math.max(0, nextLiked);
   } catch (error) {
     ElMessage.error(error.message);
   } finally {

@@ -10,6 +10,9 @@ import InfoEditPage from "./views/InfoEditPage.vue";
 import ShopListPage from "./views/ShopListPage.vue";
 import ShopDetailPage from "./views/ShopDetailPage.vue";
 import ShopGoodsPage from "./views/ShopGoodsPage.vue";
+import GoodsDetailPage from "./views/GoodsDetailPage.vue";
+import OrderHistoryPage from "./views/OrderHistoryPage.vue";
+import OrderPayPage from "./views/OrderPayPage.vue";
 import ShopCreatePage from "./views/ShopCreatePage.vue";
 import UserBlogsPage from "./views/UserBlogsPage.vue";
 import UserShopsPage from "./views/UserShopsPage.vue";
@@ -28,6 +31,9 @@ const routes = [
       { path: "shop-create", name: "shop-create", component: ShopCreatePage },
       { path: "shop/:id", name: "shop-detail", component: ShopDetailPage, props: true },
       { path: "shop/:id/goods", name: "shop-goods", component: ShopGoodsPage, props: true },
+      { path: "goods/:id", name: "goods-detail", component: GoodsDetailPage, props: true },
+      { path: "orders", name: "order-history", component: OrderHistoryPage },
+      { path: "order/pay/:orderId", name: "order-pay", component: OrderPayPage, props: true },
       { path: "user/:userId/blogs", name: "user-blogs", component: UserBlogsPage, props: true },
       { path: "user/:userId/shops", name: "user-shops", component: UserShopsPage, props: true },
       { path: "blog/:id", name: "blog-detail", component: BlogDetailPage, props: true },
