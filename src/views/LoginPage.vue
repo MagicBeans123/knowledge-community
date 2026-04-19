@@ -129,6 +129,9 @@ const login = async () => {
       code: code.value.trim()
     });
     sessionStorage.setItem("token", data.token);
+    import("../services/stompService.js")
+      .then(({ ensureConnected }) => ensureConnected())
+      .catch(() => {});
     ElMessage.success("登录成功");
     router.push("/community");
   } catch (e) {

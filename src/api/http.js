@@ -37,6 +37,15 @@ http.interceptors.response.use(
   (error) => {
     if (error?.response?.status === 401) {
       sessionStorage.removeItem("token");
+      if (typeof window !== "undefined") {
+        if (window.__kcStompDisconnect) {
+          window.__kcStompDisconnect();
+        } else {
+          import("../services/stompService.js")
+            .then((m) => m.disconnect())
+            .catch(() => {});
+        }
+      }
       const currentPath = window.location.pathname;
       const isAuthPage = currentPath === "/login" || currentPath === "/register";
       if (!isAuthPage) {

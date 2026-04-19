@@ -3,6 +3,13 @@ import vue from "@vitejs/plugin-vue";
 
 export default defineConfig({
   plugins: [vue()],
+  /** sockjs-client 等包在浏览器里没有 Node 的 global，需映射到 globalThis */
+  define: {
+    global: "globalThis"
+  },
+  optimizeDeps: {
+    include: ["sockjs-client", "@stomp/stompjs"]
+  },
   server: {
     host: "0.0.0.0",
     port: 5173,

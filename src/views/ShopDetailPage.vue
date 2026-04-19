@@ -3,7 +3,15 @@
   <div v-else-if="!shop" class="card plain state">未找到该商户</div>
   <div class="detail" v-else-if="shop">
     <section class="card hero">
-      <el-button text class="back" @click="router.back()">返回</el-button>
+      <div class="hero-top">
+        <el-button text class="back" @click="router.back()">返回</el-button>
+        <div v-if="isShopOwner" class="hero-owner-actions">
+          <router-link class="edit-shop-link" :to="`/community/shop/${shopId}/edit`">编辑店铺</router-link>
+          <el-button type="danger" plain size="small" :loading="shopDeleting" @click="deleteShop">
+            删除店铺
+          </el-button>
+        </div>
+      </div>
       <div class="hero-main">
         <h1>{{ shop.name }}</h1>
         <p class="addr">{{ shop.address }}</p>
@@ -62,6 +70,7 @@
             <strong>
               {{ g.title }}
               <span v-if="Number(g.type) === 1" class="seckill-tag">秒杀</span>
+              <span class="status-tag" :class="statusClass(g.status)">{{ statusText(g.status) }}</span>
               <span v-if="Number(g.type) === 1 && g.out" class="expired-tag">已过期</span>
             </strong>
             <p v-if="g.description" class="sub">{{ g.description }}</p>
@@ -76,6 +85,35 @@
             <span class="pay">¥{{ g.payValue }}</span>
             <span class="actual">抵 ¥{{ g.actualValue }}</span>
             <el-button size="small" @click="goGoodsDetail(g)">详情</el-button>
+            <el-button
+              v-if="isShopOwner && Number(g.status) === 1"
+              size="small"
+              type="warning"
+              :loading="isStatusLoading(g.id)"
+              @click="updateGoodsStatus(g.id, 2)"
+            >
+              下架
+            </el-button>
+            <el-button
+              v-if="isShopOwner && Number(g.status) === 2"
+              size="small"
+              type="success"
+              :loading="isStatusLoading(g.id)"
+              @click="updateGoodsStatus(g.id, 1)"
+            >
+              上架
+            </el-button>
+            <el-button
+              v-if="isShopOwner"
+              size="small"
+              type="danger"
+              plain
+              :loading="deletingGoodsId === String(g.id)"
+              :disabled="isStatusLoading(g.id)"
+              @click="deleteGoods(g.id)"
+            >
+              删除
+            </el-button>
           </div>
         </li>
       </ul>
@@ -175,7 +213,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
 import http from "../api/http";
 import { useUserStore } from "../stores/user";
@@ -211,6 +249,9 @@ const imagePreviewVisible = ref(false);
 const imagePreviewUrl = ref("");
 const viewerId = ref("");
 const goodsTypeFilter = ref("all");
+const statusLoadingMap = ref({});
+const deletingGoodsId = ref("");
+const shopDeleting = ref(false);
 const publishForm = reactive({
   title: "",
   description: "",
@@ -248,6 +289,21 @@ const visibleGoodsList = computed(() => {
   return filteredGoodsList.value.slice(start, start + goodsSize.value);
 });
 const goodsPagerTotal = computed(() => (localGoodsPaging.value ? filteredGoodsList.value.length : goodsTotal.value));
+const statusText = (status) => {
+  const s = Number(status);
+  if (s === 1) return "上架";
+  if (s === 2) return "下架";
+  if (s === 3) return "过期";
+  return "未知";
+};
+const statusClass = (status) => {
+  const s = Number(status);
+  if (s === 1) return "is-on";
+  if (s === 2) return "is-off";
+  if (s === 3) return "is-expired";
+  return "";
+};
+const isStatusLoading = (goodsId) => Boolean(statusLoadingMap.value[String(goodsId)]);
 
 const load = async () => {
   shopLoading.value = true;
@@ -259,6 +315,35 @@ const load = async () => {
     shop.value = null;
   } finally {
     shopLoading.value = false;
+  }
+};
+
+const deleteShop = async () => {
+  if (!isShopOwner.value || !shopId) return;
+  try {
+    await ElMessageBox.confirm("确定删除该店铺吗？删除后不可恢复。", "删除店铺", {
+      type: "warning",
+      confirmButtonText: "删除",
+      cancelButtonText: "取消",
+      confirmButtonClass: "el-button--danger"
+    });
+  } catch {
+    return;
+  }
+  shopDeleting.value = true;
+  try {
+    await http.delete(`/shop/${shopId}`);
+    ElMessage.success("已删除店铺");
+    const uid = shop.value?.userId;
+    if (uid != null && uid !== "") {
+      router.push(`/community/user/${uid}/shops`);
+    } else {
+      router.push("/community/shops");
+    }
+  } catch (e) {
+    ElMessage.error(e.message || "删除失败");
+  } finally {
+    shopDeleting.value = false;
   }
 };
 
@@ -282,6 +367,9 @@ const toggleFollowOwner = async () => {
     await http.put(`/follow/${uid}/${!followedOwner.value}`);
     followedOwner.value = !followedOwner.value;
     ElMessage.success(followedOwner.value ? "已关注店主" : "已取消关注");
+    import("../services/stompService.js")
+      .then((m) => m.resyncSellerSeckillSubscriptions())
+      .catch(() => {});
   } catch (e) {
     ElMessage.error(e.message || "操作失败");
   } finally {
@@ -353,6 +441,51 @@ const goGoodsDetail = (goods) => {
   if (!goods?.id) return;
   const type = Number(goods.type) === 1 ? 1 : 0;
   router.push(`/community/goods/${goods.id}?type=${type}`);
+};
+
+const updateGoodsStatus = async (goodsId, nextStatus) => {
+  if (!goodsId) return;
+  const gid = String(goodsId);
+  statusLoadingMap.value = { ...statusLoadingMap.value, [gid]: true };
+  try {
+    if (Number(nextStatus) === 2) {
+      await http.put(`/goods/${gid}/off`);
+    } else if (Number(nextStatus) === 1) {
+      await http.put(`/goods/${gid}/on`);
+    } else {
+      return;
+    }
+    ElMessage.success(Number(nextStatus) === 2 ? "下架成功" : "上架成功");
+    await loadGoods(goodsCurrent.value, goodsSize.value);
+  } catch (e) {
+    ElMessage.error(e.message || "操作失败");
+  } finally {
+    statusLoadingMap.value = { ...statusLoadingMap.value, [gid]: false };
+  }
+};
+
+const deleteGoods = async (goodsId) => {
+  if (!goodsId) return;
+  const gid = String(goodsId);
+  try {
+    await ElMessageBox.confirm("删除后不可恢复，确定删除该商品？", "删除商品", {
+      type: "warning",
+      confirmButtonText: "删除",
+      cancelButtonText: "取消"
+    });
+  } catch {
+    return;
+  }
+  deletingGoodsId.value = gid;
+  try {
+    await http.delete(`/goods/${gid}`);
+    ElMessage.success("已删除商品");
+    await loadGoods(goodsCurrent.value, goodsSize.value);
+  } catch (e) {
+    ElMessage.error(e.message || "删除失败");
+  } finally {
+    deletingGoodsId.value = "";
+  }
 };
 
 function unwrapUploadUrl(data) {
@@ -478,7 +611,9 @@ const submitPublish = async () => {
 
 onMounted(async () => {
   try {
-    await userStore.fetchMe();
+    if (me.value?.id == null || me.value?.id === "") {
+      await userStore.fetchMe();
+    }
     viewerId.value = String(me.value?.id ?? "");
   } catch {
     viewerId.value = "";
@@ -517,6 +652,37 @@ onMounted(async () => {
   padding: 20px 24px 24px;
 }
 
+.hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  width: min(760px, 100%);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.hero-owner-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.edit-shop-link {
+  font-size: 14px;
+  color: var(--el-color-primary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.edit-shop-link:hover {
+  text-decoration: underline;
+}
+
 .hero-main {
   width: min(760px, 100%);
   margin: 0 auto;
@@ -524,7 +690,6 @@ onMounted(async () => {
 
 .back {
   padding: 0;
-  margin-bottom: 8px;
   color: var(--kc-muted);
 }
 
@@ -772,6 +937,30 @@ onMounted(async () => {
   color: #b54708;
   background: #fff3e6;
   border: 1px solid #ffd8a8;
+}
+
+.status-tag {
+  margin-left: 8px;
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  border: 1px solid transparent;
+}
+.status-tag.is-on {
+  color: #027a48;
+  background: #ecfdf3;
+  border-color: #abefc6;
+}
+.status-tag.is-off {
+  color: #344054;
+  background: #f2f4f7;
+  border-color: #d0d5dd;
+}
+.status-tag.is-expired {
+  color: #b42318;
+  background: #fee4e2;
+  border-color: #fecdca;
 }
 
 .expired-tag {

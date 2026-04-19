@@ -193,3 +193,16 @@ export function genderLabel(value) {
   if (Number.isNaN(n)) return String(value);
   return GENDER_LABELS[n] ?? `选项${n}`;
 }
+
+/**
+ * 订单商品图：仅用于图片 URL 渲染，来自 images（或 image）逗号分隔；不在页面上展示原始字符串。
+ */
+export function parseOrderImageUrls(o) {
+  const raw = o?.images ?? o?.image;
+  if (raw == null) return [];
+  if (Array.isArray(raw)) return raw.map((x) => String(x).trim()).filter(Boolean);
+  return String(raw)
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}

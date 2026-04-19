@@ -3,7 +3,7 @@
     <section class="head card">
       <h2 class="title">商户</h2>
       <div class="head-actions">
-        <el-button type="primary" size="small" @click="goCreate">创建商户</el-button>
+        <el-button type="primary" size="small" plain @click="goCreate">创建商铺</el-button>
         <el-select
         v-if="types.length"
         v-model="activeTypeId"
@@ -52,12 +52,14 @@ import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import http from "../api/http";
 import { normalizeShop } from "../utils/dto";
+import { useUserStore } from "../stores/user";
 
 defineProps({
   keyword: { type: String, default: "" }
 });
 
 const router = useRouter();
+const userStore = useUserStore();
 const types = ref([]);
 const activeTypeId = ref("");
 const shops = ref([]);
@@ -112,8 +114,20 @@ const goDetail = (id) => {
   router.push(`/community/shop/${id}`);
 };
 
-const goCreate = () => {
-  router.push("/community/shop-create");
+const goCreate = async () => {
+  try {
+    await userStore.fetchMe();
+  } catch {
+    router.push("/login");
+    return;
+  }
+  const id = userStore.user?.id;
+  if (id == null || id === "") {
+    ElMessage.warning("请先登录");
+    router.push("/login");
+    return;
+  }
+  router.push(`/community/user/${id}/shops/create`);
 };
 
 onMounted(async () => {

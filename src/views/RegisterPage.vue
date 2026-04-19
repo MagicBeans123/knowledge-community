@@ -25,11 +25,19 @@
           <el-input v-model="form.confirmPassword" show-password placeholder="再次输入密码" @blur="checkConfirm" />
           <span v-if="errors.confirmPassword" class="err">{{ errors.confirmPassword }}</span>
         </div>
+        <div class="field">
+          <label>验证码</label>
+          <div class="code-row">
+            <el-input v-model="form.code" maxlength="6" placeholder="请输入验证码" />
+            <el-button @click="sendCode">发送验证码</el-button>
+          </div>
+          <span v-if="errors.code" class="err">{{ errors.code }}</span>
+        </div>
       </div>
 
       <div class="actions">
-        <el-button class="full" type="primary" @click="submitRegister">注册</el-button>
-        <el-button class="full" @click="goLogin">已有手机号，去登录</el-button>
+        <el-button type="primary" @click="submitRegister">注册</el-button>
+        <el-button @click="goLogin">已有手机号，去登录</el-button>
       </div>
     </section>
   </div>
@@ -47,13 +55,15 @@ const phoneRegex = /^1\d{10}$/;
 const form = reactive({
   phone: "",
   password: "",
-  confirmPassword: ""
+  confirmPassword: "",
+  code: ""
 });
 
 const errors = reactive({
   phone: "",
   password: "",
-  confirmPassword: ""
+  confirmPassword: "",
+  code: ""
 });
 
 const checkPhone = () => {
@@ -90,10 +100,37 @@ const checkConfirm = () => {
   }
 };
 
+const checkCode = () => {
+  if (!form.code.trim()) {
+    errors.code = "验证码不能为空";
+  } else {
+    errors.code = "";
+  }
+};
+
+const sendCode = async () => {
+  checkPhone();
+  if (!form.phone.trim()) {
+    errors.phone = "手机号不能为空";
+    return;
+  }
+  if (!phoneRegex.test(form.phone.trim())) {
+    errors.phone = "请输入正确的11位手机号";
+    return;
+  }
+  try {
+    await http.post("/user/code", null, { params: { phone: form.phone } });
+    ElMessage.success("验证码已发送");
+  } catch (e) {
+    ElMessage.error(e.message || "发送失败");
+  }
+};
+
 const submitRegister = async () => {
   checkPhone();
   checkPassword();
   checkConfirm();
+  checkCode();
 
   if (!form.phone.trim()) {
     errors.phone = "手机号不能为空";
@@ -101,7 +138,11 @@ const submitRegister = async () => {
     errors.phone = "请输入正确的11位手机号";
   }
 
-  if (errors.phone || errors.password || errors.confirmPassword) {
+  if (!form.code.trim()) {
+    errors.code = "验证码不能为空";
+  }
+
+  if (errors.phone || errors.password || errors.confirmPassword || errors.code) {
     ElMessage.warning("请修正表单中的错误");
     return;
   }
@@ -111,7 +152,8 @@ const submitRegister = async () => {
     await http.post("/user/register", {
       nickName: autoNickName,
       phone: form.phone.trim(),
-      password: form.password
+      password: form.password,
+      code: form.code.trim()
     });
     ElMessage.success("注册成功，请前往登录");
     router.push("/login");
@@ -189,12 +231,21 @@ const goLogin = () => {
 }
 
 .actions {
-  margin-top: 8px;
-  display: grid;
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
   gap: 10px;
 }
 
-.full {
+.actions :deep(.el-button) {
   width: 100%;
+  margin: 0;
+}
+
+.code-row {
+  display: grid;
+  grid-template-columns: 1fr 110px;
+  gap: 8px;
 }
 </style>

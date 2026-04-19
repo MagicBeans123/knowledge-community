@@ -11,11 +11,13 @@ import ShopListPage from "./views/ShopListPage.vue";
 import ShopDetailPage from "./views/ShopDetailPage.vue";
 import ShopGoodsPage from "./views/ShopGoodsPage.vue";
 import GoodsDetailPage from "./views/GoodsDetailPage.vue";
-import OrderHistoryPage from "./views/OrderHistoryPage.vue";
+import OrderManagementPage from "./views/OrderManagementPage.vue";
 import OrderPayPage from "./views/OrderPayPage.vue";
 import ShopCreatePage from "./views/ShopCreatePage.vue";
+import ShopEditPage from "./views/ShopEditPage.vue";
 import UserBlogsPage from "./views/UserBlogsPage.vue";
 import UserShopsPage from "./views/UserShopsPage.vue";
+import FollowListPage from "./views/FollowListPage.vue";
 import LoginPage from "./views/LoginPage.vue";
 import RegisterPage from "./views/RegisterPage.vue";
 
@@ -28,14 +30,18 @@ const routes = [
       { path: "", redirect: "/community/explore" },
       { path: "explore", name: "explore", component: ExplorePageV2 },
       { path: "shops", name: "shops", component: ShopListPage },
-      { path: "shop-create", name: "shop-create", component: ShopCreatePage },
+      { path: "shop-create", redirect: "/community/info" },
+      { path: "shop/:id/edit", name: "shop-edit", component: ShopEditPage, props: true },
       { path: "shop/:id", name: "shop-detail", component: ShopDetailPage, props: true },
       { path: "shop/:id/goods", name: "shop-goods", component: ShopGoodsPage, props: true },
       { path: "goods/:id", name: "goods-detail", component: GoodsDetailPage, props: true },
-      { path: "orders", name: "order-history", component: OrderHistoryPage },
+      { path: "orders", name: "order-management", component: OrderManagementPage },
       { path: "order/pay/:orderId", name: "order-pay", component: OrderPayPage, props: true },
       { path: "user/:userId/blogs", name: "user-blogs", component: UserBlogsPage, props: true },
+      { path: "user/:userId/shops/create", name: "user-shop-create", component: ShopCreatePage, props: true },
       { path: "user/:userId/shops", name: "user-shops", component: UserShopsPage, props: true },
+      { path: "user/:userId/following", name: "user-following", component: FollowListPage, props: true },
+      { path: "user/:userId/followers", name: "user-followers", component: FollowListPage, props: true },
       { path: "blog/:id", name: "blog-detail", component: BlogDetailPage, props: true },
       { path: "blog-edit", name: "blog-edit", component: BlogEditPageV2 },
       { path: "info", name: "info", component: UserInfoPageV2 },

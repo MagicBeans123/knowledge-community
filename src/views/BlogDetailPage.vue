@@ -15,9 +15,21 @@
         <div class="head">
           <el-button class="back-btn" text @click="router.back()">← 返回</el-button>
           <h1 class="title">{{ blog.title }}</h1>
-          <el-button type="primary" class="like-main" :loading="likeLoading" @click="toggleLike">
-            点赞 {{ blog.liked ?? 0 }}
-          </el-button>
+          <div class="head-actions">
+            <el-button
+              v-if="isBlogOwner"
+              type="danger"
+              plain
+              size="small"
+              :loading="blogDeleting"
+              @click="deleteBlog"
+            >
+              删除博客
+            </el-button>
+            <el-button type="primary" class="like-main" :loading="likeLoading" @click="toggleLike">
+              点赞 {{ blog.liked ?? 0 }}
+            </el-button>
+          </div>
         </div>
 
         <div class="author-row">
@@ -213,7 +225,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
 import http from "../api/http";
 import { useUserStore } from "../stores/user";
@@ -260,6 +272,7 @@ const loading = ref(true);
 const loadError = ref("");
 const commentsError = ref("");
 const likeLoading = ref(false);
+const blogDeleting = ref(false);
 const defaultIcon = "/image/default.png";
 const markdownSource = ref("");
 const contentLoadError = ref("");
@@ -354,6 +367,12 @@ const showAuthorFollow = computed(() => {
   const uid = blog.value?.userId;
   if (!uid || !me.value?.id) return false;
   return Number(uid) !== Number(me.value.id);
+});
+
+const isBlogOwner = computed(() => {
+  const uid = blog.value?.userId;
+  if (uid == null || uid === "" || me.value?.id == null || me.value?.id === "") return false;
+  return String(uid) === String(me.value.id);
 });
 
 const formatDate = (timestamp) => {
@@ -667,6 +686,35 @@ const toggleLike = async () => {
   }
 };
 
+const deleteBlog = async () => {
+  if (!blogId || !isBlogOwner.value) return;
+  try {
+    await ElMessageBox.confirm("确定要删除这篇博客吗？删除后无法恢复。", "删除博客", {
+      confirmButtonText: "删除",
+      cancelButtonText: "取消",
+      type: "warning",
+      confirmButtonClass: "el-button--danger"
+    });
+  } catch {
+    return;
+  }
+  blogDeleting.value = true;
+  try {
+    await http.delete(`/blog/${blogId}`);
+    ElMessage.success("博客已删除");
+    const uid = blog.value?.userId;
+    if (uid != null && uid !== "") {
+      router.push(`/community/user/${uid}/blogs`);
+    } else {
+      router.push("/community/explore");
+    }
+  } catch (error) {
+    ElMessage.error(error.message || "删除失败");
+  } finally {
+    blogDeleting.value = false;
+  }
+};
+
 const loadAuthorFollow = async () => {
   const uid = blog.value?.userId;
   if (!uid || !showAuthorFollow.value) return;
@@ -686,6 +734,9 @@ const toggleFollowAuthor = async () => {
     await http.put(`/follow/${uid}/${!followedAuthor.value}`);
     followedAuthor.value = !followedAuthor.value;
     ElMessage.success(followedAuthor.value ? "已关注" : "已取消关注");
+    import("../services/stompService.js")
+      .then((m) => m.resyncSellerSeckillSubscriptions())
+      .catch(() => {});
   } catch (error) {
     ElMessage.error(error.message);
   } finally {
@@ -777,9 +828,20 @@ onUnmounted(() => {
   text-align: left;
 }
 
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.head-actions .like-main {
+  flex-shrink: 0;
+}
+
 .like-main {
   flex-shrink: 0;
-  margin-left: auto;
 }
 
 .author-row {

@@ -1,9 +1,9 @@
 <template>
   <section class="wrap">
-    <div class="card">
-      <el-button text class="back" @click="goBackToMyShops">← 返回我的店铺</el-button>
-      <h2>创建商户</h2>
-      <p v-if="ownerUserId" class="sub">在个人中心 · 我的店铺中发布新商户</p>
+    <div v-if="loading" class="card state">加载中…</div>
+    <div v-else-if="loadError" class="card state muted">{{ loadError }}</div>
+    <div v-else class="card">
+      <h2>编辑商户</h2>
       <el-form label-width="100px" class="form">
         <el-form-item label="名称" required>
           <el-input v-model="form.name" maxlength="128" show-word-limit placeholder="店铺名称" />
@@ -40,8 +40,13 @@
           <el-input v-model="form.address" maxlength="255" placeholder="详细地址" />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" :loading="submitting" @click="submit">提交</el-button>
-          <el-button @click="goBackToMyShops">取消</el-button>
+          <div class="form-actions">
+            <div class="form-actions-main">
+              <el-button type="primary" :loading="submitting" @click="submit">保存</el-button>
+              <el-button @click="goBackToList">取消</el-button>
+            </div>
+            <el-button type="danger" plain :loading="shopDeleting" @click="deleteShop">删除店铺</el-button>
+          </div>
         </el-form-item>
       </el-form>
     </div>
@@ -49,15 +54,15 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
 import http from "../api/http";
 import { useUserStore } from "../stores/user";
+import { normalizeShop } from "../utils/dto";
 
-const props = defineProps({
-  userId: { type: [String, Number], default: "" },
+defineProps({
   keyword: { type: String, default: "" }
 });
 
@@ -66,18 +71,13 @@ const router = useRouter();
 const userStore = useUserStore();
 const { user: me } = storeToRefs(userStore);
 
-const ownerUserId = computed(() => {
-  const p = props.userId || route.params.userId;
-  return p != null && String(p).trim() !== "" ? String(p).trim() : "";
-});
-
-const goBackToMyShops = () => {
-  const id = ownerUserId.value;
-  if (id) router.push(`/community/user/${id}/shops`);
-  else router.push("/community/info");
-};
+const shopId = route.params.id;
+const loading = ref(true);
+const loadError = ref("");
 const types = ref([]);
 const submitting = ref(false);
+const shopDeleting = ref(false);
+const shopOwnerUserId = ref("");
 const imageInputRef = ref(null);
 const imageUploading = ref(false);
 const uploadedImages = ref([]);
@@ -158,34 +158,73 @@ watch(
   }
 );
 
-onMounted(async () => {
+const goBackToList = () => {
+  const id = shopOwnerUserId.value;
+  if (id) router.push(`/community/user/${id}/shops`);
+  else router.back();
+};
+
+const deleteShop = async () => {
+  if (!shopId) return;
   try {
-    await userStore.fetchMe();
+    await ElMessageBox.confirm("确定删除该店铺吗？删除后不可恢复。", "删除店铺", {
+      type: "warning",
+      confirmButtonText: "删除",
+      cancelButtonText: "取消",
+      confirmButtonClass: "el-button--danger"
+    });
+  } catch {
+    return;
+  }
+  shopDeleting.value = true;
+  try {
+    await http.delete(`/shop/${shopId}`);
+    ElMessage.success("已删除店铺");
+    const id = shopOwnerUserId.value;
+    if (id) router.replace(`/community/user/${id}/shops`);
+    else router.replace("/community/shops");
+  } catch (e) {
+    ElMessage.error(e.message || "删除失败");
+  } finally {
+    shopDeleting.value = false;
+  }
+};
+
+onMounted(async () => {
+  loading.value = true;
+  loadError.value = "";
+  shopOwnerUserId.value = "";
+  try {
+    if (me.value?.id == null || me.value?.id === "") {
+      await userStore.fetchMe();
+    }
   } catch {
     /* ignore */
   }
-  const mid = me.value?.id;
-  const oid = ownerUserId.value;
-  if (!oid) {
-    ElMessage.warning("请从个人中心 · 我的店铺进入创建");
-    router.replace("/community/info");
-    return;
-  }
-  if (mid == null || mid === "") {
-    ElMessage.warning("请先登录");
-    router.replace("/login");
-    return;
-  }
-  if (String(mid) !== String(oid)) {
-    ElMessage.warning("仅能在本人「我的店铺」下创建商户");
-    router.replace(`/community/user/${mid}/shops`);
-    return;
-  }
   try {
-    const data = await http.get("/type/list");
-    types.value = Array.isArray(data) ? data : [];
-  } catch {
-    types.value = [];
+    const [typesData, raw] = await Promise.all([http.get("/type/list"), http.get(`/shop/${shopId}`)]);
+    types.value = Array.isArray(typesData) ? typesData : [];
+    const shop = normalizeShop(raw);
+    if (!shop?.id) {
+      loadError.value = "未找到该商户";
+      return;
+    }
+    shopOwnerUserId.value = shop.userId != null ? String(shop.userId) : "";
+    const mid = me.value?.id;
+    if (mid == null || mid === "" || String(shop.userId ?? "") !== String(mid)) {
+      loadError.value = "仅店主可编辑该商户";
+      return;
+    }
+    form.name = String(shop.name || "").trim();
+    form.typeId = shop.typeId ?? null;
+    form.address = String(shop.address || "").trim();
+    const imgs = shop.imageList?.length ? shop.imageList : [];
+    uploadedImages.value = imgs.slice(0, 5);
+    form.images = uploadedImages.value.join(",");
+  } catch (e) {
+    loadError.value = e.message || "加载失败";
+  } finally {
+    loading.value = false;
   }
 });
 
@@ -204,18 +243,16 @@ const submit = async () => {
   }
   submitting.value = true;
   try {
-    await http.post("/shop", {
+    await http.put(`/shop/${shopId}`, {
       name: form.name.trim(),
       typeId: form.typeId,
       images: form.images.trim() || " ",
       address: form.address.trim()
     });
-    ElMessage.success("创建成功");
-    const id = ownerUserId.value;
-    if (id) router.push(`/community/user/${id}/shops`);
-    else router.push("/community/info");
+    ElMessage.success("已保存");
+    router.push(`/community/shop/${shopId}`);
   } catch (e) {
-    ElMessage.error(e.message || "创建失败");
+    ElMessage.error(e.message || "保存失败");
   } finally {
     submitting.value = false;
   }
@@ -236,24 +273,22 @@ const submit = async () => {
   box-shadow: var(--kc-shadow);
 }
 
-.back {
-  padding: 0;
-  margin-bottom: 10px;
-  display: block;
-  width: fit-content;
-}
-
-h2 {
-  margin: 0 0 8px;
-  font-size: 26px;
-  font-family: Georgia, "Times New Roman", serif;
+.state {
+  text-align: center;
+  padding: 40px 20px;
+  font-size: 14px;
   color: var(--kc-text);
 }
 
-.sub {
-  margin: 0 0 20px;
-  font-size: 13px;
+.state.muted {
   color: var(--kc-muted);
+}
+
+h2 {
+  margin: 0 0 20px;
+  font-size: 26px;
+  font-family: Georgia, "Times New Roman", serif;
+  color: var(--kc-text);
 }
 
 .form :deep(.el-form-item__label) {
@@ -316,5 +351,20 @@ h2 {
   margin: 0;
   font-size: 13px;
   color: var(--kc-muted);
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.form-actions-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 </style>

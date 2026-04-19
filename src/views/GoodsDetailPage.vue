@@ -3,7 +3,19 @@
     <section class="card head">
       <el-button text class="back" @click="router.back()">返回</el-button>
       <h2>商品详情</h2>
-      <router-link v-if="goods?.shopId" class="shop-link" :to="`/community/shop/${goods.shopId}`">所属商店</router-link>
+      <div class="head-right">
+        <router-link v-if="goods?.shopId" class="shop-link" :to="`/community/shop/${goods.shopId}`">所属商店</router-link>
+        <el-button
+          v-if="isShopOwner"
+          type="danger"
+          plain
+          size="small"
+          :loading="deletingGoods"
+          @click="deleteGoods"
+        >
+          删除商品
+        </el-button>
+      </div>
     </section>
 
     <section v-if="loading" class="card state">加载中…</section>
@@ -19,8 +31,14 @@
           <p class="desc-title">商品描述</p>
           <p class="desc">{{ goods.description || "暂无描述" }}</p>
           <div class="price-row">
-            <span class="pay">¥{{ goods.payValue }}</span>
-            <span class="actual">抵 ¥{{ goods.actualValue }}</span>
+            <span class="pay-line">
+              <span class="price-label">标价</span>
+              <span class="pay">¥{{ goods.payValue }}</span>
+            </span>
+            <span class="actual-line">
+              <span class="price-label">实际金额</span>
+              <span class="actual-amt">¥{{ goods.actualValue }}</span>
+            </span>
             <el-button class="buy-btn" type="primary" @click="openOrderForm">
               立即购买
             </el-button>
@@ -58,12 +76,14 @@
             <el-form-item label="数量" required>
               <el-input-number v-model="orderForm.sum" :min="1" :step="1" :disabled="Number(goods.type) === 1" />
             </el-form-item>
-            <el-form-item label="支付" required>
-              <el-select v-model="orderForm.payType" placeholder="请选择支付方式" style="width: 100%">
-                <el-option label="余额支付" :value="1" />
-                <el-option label="支付宝" :value="2" />
-                <el-option label="微信" :value="3" />
-              </el-select>
+            <el-form-item label="实际金额">
+              <span class="order-actual-total">¥{{ formatOrderYuan(orderActualTotal) }}</span>
+              <span v-if="Number(goods.type) !== 1" class="order-actual-hint">
+                （单价 ¥{{ formatOrderYuan(unitActual) }} × {{ orderForm.sum }}）
+              </span>
+            </el-form-item>
+            <el-form-item label="支付方式">
+              <span class="pay-hint">下单后在支付页选择：微信/支付宝</span>
             </el-form-item>
             <el-form-item>
               <el-button class="submit-btn" type="primary" :loading="buying" @click="buyGoods">提交订单</el-button>
@@ -82,9 +102,11 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
+import { storeToRefs } from "pinia";
 import http from "../api/http";
-import { normalizeGoods } from "../utils/dto";
+import { normalizeGoods, normalizeShop } from "../utils/dto";
+import { useUserStore } from "../stores/user";
 
 const props = defineProps({
   id: { type: [String, Number], default: "" }
@@ -92,11 +114,15 @@ const props = defineProps({
 
 const route = useRoute();
 const router = useRouter();
+const userStore = useUserStore();
+const { user: me } = storeToRefs(userStore);
 const goodsId = props.id || route.params.id;
 const goodsType = Number(route.query.type ?? route.query.detailType ?? route.query.goodsType ?? route.query.queryType);
 
 const loading = ref(true);
 const goods = ref(null);
+const shopOwnerId = ref("");
+const deletingGoods = ref(false);
 const buying = ref(false);
 const showOrderForm = ref(false);
 const imagePreviewVisible = ref(false);
@@ -143,10 +169,38 @@ const orderForm = reactive({
   province: "",
   city: "",
   detailAddress: "",
-  sum: 1,
-  payType: 1
+  sum: 1
 });
 const cityOptions = computed(() => (orderForm.province ? regionMap[orderForm.province] || [] : []));
+
+const isShopOwner = computed(() => {
+  const mid = me.value?.id;
+  const oid = shopOwnerId.value;
+  if (mid == null || mid === "" || oid == null || oid === "") return false;
+  return String(mid) === String(oid);
+});
+
+/** 商品实际单价（与后端 actual_value 一致，即应付价） */
+const unitActual = computed(() => {
+  const v = Number(goods.value?.actualValue);
+  return Number.isFinite(v) ? v : 0;
+});
+
+/** 下单侧展示：实际应付 = 实际单价 × 数量（秒杀固定 1 件） */
+const orderActualTotal = computed(() => {
+  if (!goods.value) return 0;
+  const unit = unitActual.value;
+  if (Number(goods.value.type) === 1) return unit;
+  const n = Number(orderForm.sum);
+  const qty = Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
+  return unit * qty;
+});
+
+const formatOrderYuan = (n) => {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return "0.00";
+  return x.toFixed(2);
+};
 
 watch(
   () => orderForm.province,
@@ -160,6 +214,35 @@ const openImagePreview = (url) => {
   if (!u) return;
   imagePreviewUrl.value = u;
   imagePreviewVisible.value = true;
+};
+
+const deleteGoods = async () => {
+  if (!goods.value?.id) return;
+  const gid = String(goods.value.id);
+  try {
+    await ElMessageBox.confirm("删除后不可恢复，确定删除该商品？", "删除商品", {
+      type: "warning",
+      confirmButtonText: "删除",
+      cancelButtonText: "取消"
+    });
+  } catch {
+    return;
+  }
+  deletingGoods.value = true;
+  try {
+    await http.delete(`/goods/${gid}`);
+    ElMessage.success("已删除商品");
+    const sid = goods.value.shopId;
+    if (sid != null && sid !== "") {
+      router.replace(`/community/shop/${sid}/goods`);
+    } else {
+      router.replace("/community/explore");
+    }
+  } catch (e) {
+    ElMessage.error(e.message || "删除失败");
+  } finally {
+    deletingGoods.value = false;
+  }
 };
 
 const openOrderForm = () => {
@@ -211,6 +294,12 @@ const buyGoods = async () => {
     return;
   }
   const address = `${province}${city}${detailAddress}`;
+  const orderTitle = String(goods.value.title || "").trim();
+  const orderImages =
+    String(goods.value.images || "").trim() ||
+    (Array.isArray(goods.value.imageList) && goods.value.imageList.length
+      ? goods.value.imageList.join(",")
+      : "");
 
   const isSeckill = Number(goods.value.type) === 1;
   const sum = isSeckill ? 1 : Number(orderForm.sum);
@@ -218,36 +307,30 @@ const buyGoods = async () => {
     ElMessage.warning("数量需为正整数");
     return;
   }
-  const payType = Number(orderForm.payType);
-  if (![1, 2, 3].includes(payType)) {
-    ElMessage.warning("请选择支付方式");
-    return;
-  }
-
   buying.value = true;
   try {
     let result = null;
     if (isSeckill) {
       result = await http.post(`/goods/order/seckill/${goods.value.id}`, {
-        userId: null,
         goodsId: Number(goods.value.id),
-        payType,
         status: 1,
         payTime: null,
         address,
         sum: 1,
-        name
+        name,
+        title: orderTitle,
+        images: orderImages
       });
     } else {
       result = await http.post(`/goods/order/normal/${goods.value.id}`, {
-        userId: null,
         goodsId: Number(goods.value.id),
-        payType,
         status: 1,
         payTime: null,
         address,
         sum,
-        name
+        name,
+        title: orderTitle,
+        images: orderImages
       });
     }
     const orderId = extractOrderId(result);
@@ -272,10 +355,26 @@ onMounted(async () => {
     return;
   }
   loading.value = true;
+  shopOwnerId.value = "";
+  try {
+    await userStore.fetchMe();
+  } catch {
+    /* ignore */
+  }
   try {
     const data = await http.get(`/goods/detail/${goodsId}/${goodsType}`);
     const goodsRaw = data?.goods ?? data;
     goods.value = goodsRaw ? normalizeGoods(goodsRaw) : null;
+    const sid = goods.value?.shopId;
+    if (sid != null && sid !== "") {
+      try {
+        const shopRaw = await http.get(`/shop/${sid}`);
+        const shop = normalizeShop(shopRaw);
+        shopOwnerId.value = shop?.userId != null ? String(shop.userId) : "";
+      } catch {
+        shopOwnerId.value = "";
+      }
+    }
   } catch (e) {
     ElMessage.error(e.message || "加载商品详情失败");
     goods.value = null;
@@ -288,10 +387,11 @@ onMounted(async () => {
 <style scoped>
 .page { max-width: 920px; margin: 0 auto; display: grid; gap: 14px; }
 .card { background: var(--kc-card); border: 1px solid var(--kc-border); border-radius: 14px; box-shadow: var(--kc-shadow); }
-.head { padding: 16px 20px; display: flex; align-items: center; gap: 12px; }
+.head { padding: 16px 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .back { padding: 0; color: var(--kc-muted); }
-.head h2 { margin: 0; font-size: 22px; color: var(--kc-text); }
-.shop-link { margin-left: auto; color: var(--el-color-primary); text-decoration: none; }
+.head h2 { margin: 0; font-size: 22px; color: var(--kc-text); flex: 1 1 auto; min-width: 0; }
+.head-right { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.shop-link { color: var(--el-color-primary); text-decoration: none; }
 .shop-link:hover { text-decoration: underline; }
 .state { padding: 24px; text-align: center; color: var(--kc-text); }
 .state.muted { color: var(--kc-muted); }
@@ -305,11 +405,16 @@ onMounted(async () => {
 .expired-tag { margin-left: 8px; font-size: 11px; padding: 1px 6px; border-radius: 999px; background: #fee4e2; color: #b42318; border: 1px solid #fecdca; }
 .desc-title { margin: 12px 0 0; font-size: 13px; color: var(--kc-muted); }
 .desc { margin: 6px 0 0; color: var(--kc-text); line-height: 1.7; white-space: pre-wrap; }
-.price-row { margin-top: 14px; display: flex; align-items: baseline; gap: 10px; }
+.price-row { margin-top: 14px; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.price-label { font-size: 12px; color: var(--kc-muted); margin-right: 4px; }
+.pay-line, .actual-line { display: inline-flex; align-items: baseline; gap: 4px; }
 .pay { font-size: 24px; font-weight: 700; color: var(--el-color-primary); }
-.actual { font-size: 13px; color: var(--kc-muted); }
+.actual-amt { font-size: 18px; font-weight: 600; color: var(--kc-text); }
 .buy-btn { margin-left: auto; }
+.order-actual-total { font-size: 18px; font-weight: 600; color: var(--el-color-primary); }
+.order-actual-hint { margin-left: 8px; font-size: 12px; color: var(--kc-muted); }
 .submit-btn { width: 100%; }
+.pay-hint { color: var(--kc-muted); font-size: 13px; }
 .meta { margin: 10px 0 0; font-size: 13px; color: var(--kc-muted); }
 .img-row { margin-top: 14px; display: flex; gap: 10px; overflow-x: auto; }
 .img-item { position: relative; width: 180px; height: 120px; flex: 0 0 auto; cursor: zoom-in; }

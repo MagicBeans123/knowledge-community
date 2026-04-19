@@ -1,17 +1,19 @@
 <template>
   <section class="user-page" v-if="profileReady">
     <div class="hero card">
-      <img class="avatar" :src="profile.icon || defaultIcon" alt="avatar" />
-      <div class="hero-info">
-        <h2>{{ profile.nickName || "未设置昵称" }}</h2>
-        <p>手机号：{{ profile.phone || "--" }}</p>
-        <p>城市：{{ profile.city || "未设置" }}</p>
+      <div class="hero-top">
+        <img class="avatar" :src="profile.icon || defaultIcon" alt="avatar" />
+        <div class="hero-info">
+          <h2>{{ profile.nickName || "未设置昵称" }}</h2>
+          <p>手机号：{{ profile.phone || "--" }}</p>
+          <p>城市：{{ profile.city || "未设置" }}</p>
+        </div>
+        <span class="gender-tag">{{ genderLabel(profile.gender) }}</span>
       </div>
       <div class="hero-actions">
-        <span class="gender-tag">{{ genderLabel(profile.gender) }}</span>
-        <el-button plain @click="goOrderHistory">历史订单</el-button>
+        <el-button plain @click="goOrderManage">订单管理</el-button>
         <el-button v-if="profile.id != null" plain @click="goMyBlogs">我的博客</el-button>
-        <el-button v-if="profile.id != null" plain @click="goMyShops">我的商店</el-button>
+        <el-button v-if="profile.id != null" plain @click="goMyShops">我的店铺</el-button>
         <el-button v-if="profile.id != null" plain @click="goPublicView">他人视角</el-button>
         <el-button type="primary" @click="goEdit">修改资料</el-button>
       </div>
@@ -21,11 +23,23 @@
       <div class="card block">
         <h3>个人概览</h3>
         <div class="metrics">
-          <div class="metric-item">
+          <div
+            class="metric-item metric-click"
+            role="button"
+            tabindex="0"
+            @click="goFollowing"
+            @keydown.enter.prevent="goFollowing"
+          >
             <strong>{{ profile.followee ?? 0 }}</strong>
             <span>关注</span>
           </div>
-          <div class="metric-item">
+          <div
+            class="metric-item metric-click"
+            role="button"
+            tabindex="0"
+            @click="goFollowers"
+            @keydown.enter.prevent="goFollowers"
+          >
             <strong>{{ profile.fans ?? 0 }}</strong>
             <span>粉丝</span>
           </div>
@@ -97,8 +111,18 @@ const goMyBlogs = () => {
   router.push(`/community/user/${profile.value.id}/blogs`);
 };
 
-const goOrderHistory = () => {
+const goOrderManage = () => {
   router.push("/community/orders");
+};
+
+const goFollowing = () => {
+  if (profile.value?.id == null) return;
+  router.push(`/community/user/${profile.value.id}/following`);
+};
+
+const goFollowers = () => {
+  if (profile.value?.id == null) return;
+  router.push(`/community/user/${profile.value.id}/followers`);
 };
 
 onMounted(async () => {
@@ -125,11 +149,17 @@ onMounted(async () => {
 }
 
 .hero {
-  display: grid;
-  grid-template-columns: 84px 1fr auto;
-  gap: 16px;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   padding: 20px;
+}
+
+.hero-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
 }
 
 .avatar {
@@ -152,9 +182,10 @@ onMounted(async () => {
 }
 
 .hero-actions {
-  display: grid;
-  gap: 10px;
-  justify-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 .gender-tag {
@@ -192,6 +223,14 @@ onMounted(async () => {
   border-radius: 10px;
   padding: 12px;
   text-align: center;
+}
+
+.metric-click {
+  cursor: pointer;
+}
+
+.metric-click:hover {
+  border-color: var(--kc-border);
 }
 
 .metric-item strong {

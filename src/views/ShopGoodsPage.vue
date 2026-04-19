@@ -22,6 +22,7 @@
             <div>
               <strong>{{ g.title }}</strong>
               <span v-if="Number(g.type) === 1" class="tag">秒杀</span>
+              <span class="status-tag" :class="statusClass(g.status)">{{ statusText(g.status) }}</span>
               <span v-if="Number(g.type) === 1 && g.out" class="expired-tag">已过期</span>
             </div>
             <p v-if="g.description" class="desc">{{ g.description }}</p>
@@ -36,6 +37,35 @@
             <span class="pay">¥{{ g.payValue }}</span>
             <span class="actual">抵 ¥{{ g.actualValue }}</span>
             <el-button size="small" @click="goGoodsDetail(g)">详情</el-button>
+            <el-button
+              v-if="isShopOwner && Number(g.status) === 1"
+              size="small"
+              type="warning"
+              :loading="isStatusLoading(g.id)"
+              @click="updateGoodsStatus(g.id, 2)"
+            >
+              下架
+            </el-button>
+            <el-button
+              v-if="isShopOwner && Number(g.status) === 2"
+              size="small"
+              type="success"
+              :loading="isStatusLoading(g.id)"
+              @click="updateGoodsStatus(g.id, 1)"
+            >
+              上架
+            </el-button>
+            <el-button
+              v-if="isShopOwner"
+              size="small"
+              type="danger"
+              plain
+              :loading="deletingGoodsId === String(g.id)"
+              :disabled="isStatusLoading(g.id)"
+              @click="deleteGoods(g.id)"
+            >
+              删除
+            </el-button>
           </div>
         </li>
       </ul>
@@ -59,9 +89,11 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import http from "../api/http";
 import { normalizeGoods, normalizeShop } from "../utils/dto";
+import { useUserStore } from "../stores/user";
+import { storeToRefs } from "pinia";
 
 const props = defineProps({
   id: { type: [String, Number], default: "" },
@@ -70,6 +102,8 @@ const props = defineProps({
 
 const route = useRoute();
 const router = useRouter();
+const userStore = useUserStore();
+const { user: me } = storeToRefs(userStore);
 const shopId = props.id || route.params.id;
 
 const loading = ref(true);
@@ -82,6 +116,14 @@ const goodsSize = ref(10);
 const goodsTotal = ref(0);
 const localPaging = ref(false);
 const selectedGoodsType = computed(() => (goodsTypeFilter.value === "all" ? null : Number(goodsTypeFilter.value)));
+const viewerId = ref("");
+const shopOwnerId = ref("");
+const statusLoadingMap = ref({});
+const deletingGoodsId = ref("");
+const isShopOwner = computed(() => {
+  if (!viewerId.value || !shopOwnerId.value) return false;
+  return String(viewerId.value) === String(shopOwnerId.value);
+});
 
 const filteredGoods = computed(() => (localPaging.value ? allGoods.value : goods.value));
 const visibleGoods = computed(() => {
@@ -90,11 +132,71 @@ const visibleGoods = computed(() => {
   return filteredGoods.value.slice(start, start + goodsSize.value);
 });
 const pagerTotal = computed(() => (localPaging.value ? filteredGoods.value.length : goodsTotal.value));
+const statusText = (status) => {
+  const s = Number(status);
+  if (s === 1) return "上架";
+  if (s === 2) return "下架";
+  if (s === 3) return "过期";
+  return "未知";
+};
+const statusClass = (status) => {
+  const s = Number(status);
+  if (s === 1) return "is-on";
+  if (s === 2) return "is-off";
+  if (s === 3) return "is-expired";
+  return "";
+};
+const isStatusLoading = (goodsId) => Boolean(statusLoadingMap.value[String(goodsId)]);
 
 const goGoodsDetail = (goodsItem) => {
   if (!goodsItem?.id) return;
   const type = Number(goodsItem.type) === 1 ? 1 : 0;
   router.push(`/community/goods/${goodsItem.id}?type=${type}`);
+};
+
+const updateGoodsStatus = async (goodsId, nextStatus) => {
+  if (!goodsId) return;
+  const gid = String(goodsId);
+  statusLoadingMap.value = { ...statusLoadingMap.value, [gid]: true };
+  try {
+    if (Number(nextStatus) === 2) {
+      await http.put(`/goods/${gid}/off`);
+    } else if (Number(nextStatus) === 1) {
+      await http.put(`/goods/${gid}/on`);
+    } else {
+      return;
+    }
+    ElMessage.success(Number(nextStatus) === 2 ? "下架成功" : "上架成功");
+    await loadGoodsPage(goodsCurrent.value, goodsSize.value);
+  } catch (e) {
+    ElMessage.error(e.message || "操作失败");
+  } finally {
+    statusLoadingMap.value = { ...statusLoadingMap.value, [gid]: false };
+  }
+};
+
+const deleteGoods = async (goodsId) => {
+  if (!goodsId) return;
+  const gid = String(goodsId);
+  try {
+    await ElMessageBox.confirm("删除后不可恢复，确定删除该商品？", "删除商品", {
+      type: "warning",
+      confirmButtonText: "删除",
+      cancelButtonText: "取消"
+    });
+  } catch {
+    return;
+  }
+  deletingGoodsId.value = gid;
+  try {
+    await http.delete(`/goods/${gid}`);
+    ElMessage.success("已删除商品");
+    await loadGoodsPage(goodsCurrent.value, goodsSize.value);
+  } catch (e) {
+    ElMessage.error(e.message || "删除失败");
+  } finally {
+    deletingGoodsId.value = "";
+  }
 };
 
 const loadGoodsPage = async (page = goodsCurrent.value, size = goodsSize.value) => {
@@ -166,8 +268,12 @@ watch(goodsTypeFilter, async () => {
 onMounted(async () => {
   loading.value = true;
   try {
+    await userStore.fetchMe();
+    viewerId.value = String(me.value?.id ?? "");
     const [shopRaw] = await Promise.all([http.get(`/shop/${shopId}`)]);
-    shopName.value = normalizeShop(shopRaw)?.name || "";
+    const normalizedShop = normalizeShop(shopRaw);
+    shopName.value = normalizedShop?.name || "";
+    shopOwnerId.value = String(normalizedShop?.userId ?? "");
     await loadGoodsPage(goodsCurrent.value, goodsSize.value);
   } catch (e) {
     ElMessage.error(e.message || "加载失败");
@@ -196,6 +302,29 @@ onMounted(async () => {
 .desc, .meta { margin: 6px 0 0; font-size: 13px; color: var(--kc-muted); }
 .tag { margin-left: 8px; font-size: 11px; padding: 1px 6px; border-radius: 999px; background: #fff3e6; color: #b54708; border: 1px solid #ffd8a8; }
 .expired-tag { margin-left: 8px; font-size: 11px; padding: 1px 6px; border-radius: 999px; background: #fee4e2; color: #b42318; border: 1px solid #fecdca; }
+.status-tag {
+  margin-left: 8px;
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  border: 1px solid transparent;
+}
+.status-tag.is-on {
+  color: #027a48;
+  background: #ecfdf3;
+  border-color: #abefc6;
+}
+.status-tag.is-off {
+  color: #344054;
+  background: #f2f4f7;
+  border-color: #d0d5dd;
+}
+.status-tag.is-expired {
+  color: #b42318;
+  background: #fee4e2;
+  border-color: #fecdca;
+}
 .img-row { margin-top: 8px; display: flex; gap: 8px; overflow-x: auto; }
 .img-row img { width: 96px; height: 64px; object-fit: cover; border: 1px solid var(--kc-border-soft); border-radius: 8px; }
 .price { flex-shrink: 0; text-align: right; }

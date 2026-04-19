@@ -21,9 +21,6 @@
       <el-form-item label="昵称">
         <el-input v-model="form.nickName" placeholder="请输入昵称" />
       </el-form-item>
-      <el-form-item label="头像链接">
-        <el-input v-model="form.icon" placeholder="请输入头像 URL" />
-      </el-form-item>
       <el-form-item label="邮箱">
         <el-input v-model="form.email" placeholder="请输入邮箱（选填）" />
       </el-form-item>
@@ -45,6 +42,9 @@
           placeholder="选择生日"
           style="width: 100%"
         />
+      </el-form-item>
+      <el-form-item label="个性签名" class="full-line">
+        <el-input v-model="form.sign" maxlength="120" placeholder="请输入个性签名" />
       </el-form-item>
       <el-form-item label="新密码">
         <el-input v-model="form.password" show-password placeholder="留空则不修改密码" />
@@ -158,6 +158,7 @@ const save = async () => {
     nickName: form.value.nickName.trim(),
     icon: form.value.icon?.trim() || "",
     email: form.value.email?.trim() || "",
+    sign: form.value.sign?.trim() || "",
     introduce: form.value.introduce?.trim() || "",
     city: form.value.city?.trim() || "",
     gender: form.value.gender,
@@ -180,6 +181,7 @@ onMounted(async () => {
     nickName: u.nickName || "",
     icon: u.icon || "",
     email: u.email || "",
+    sign: u.sign || "",
     gender: u.gender !== undefined && u.gender !== null ? Number(u.gender) : 0,
     city: u.city || "",
     birthday: typeof u.birthday === "string" ? u.birthday.slice(0, 10) : "",

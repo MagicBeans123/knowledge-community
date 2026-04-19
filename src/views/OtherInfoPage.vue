@@ -8,8 +8,13 @@
           <p v-if="user.city" class="muted">城市：{{ user.city }}</p>
           <p v-if="user.introduce" class="intro">{{ user.introduce }}</p>
           <div class="counts">
-            <span>关注 {{ user.followee ?? 0 }}</span>
-            <span>粉丝 {{ user.fans ?? 0 }}</span>
+            <router-link class="count-link" :to="`/community/user/${displayUserId}/following`">
+              关注 {{ user.followee ?? 0 }}
+            </router-link>
+            <span class="count-sep">·</span>
+            <router-link class="count-link" :to="`/community/user/${displayUserId}/followers`">
+              粉丝 {{ user.fans ?? 0 }}
+            </router-link>
           </div>
         </div>
         <el-button v-if="!isSelf" type="primary" plain @click="toggleFollow">{{ followText }}</el-button>
@@ -241,9 +246,17 @@ const onBlogScroll = async (event) => {
 
 const toggleFollow = async () => {
   if (isPreviewMe.value) return;
-  await http.put(`/follow/${targetId}/${!followed.value}`);
-  followed.value = !followed.value;
-  ElMessage.success(followed.value ? "关注成功" : "已取消关注");
+  try {
+    await http.put(`/follow/${targetId}/${!followed.value}`);
+    followed.value = !followed.value;
+    ElMessage.success(followed.value ? "关注成功" : "已取消关注");
+    import("../services/stompService.js")
+      .then((m) => m.resyncSellerSeckillSubscriptions())
+      .catch(() => {});
+  } catch (e) {
+    ElMessage.error(e.message || "操作失败");
+    return;
+  }
   try {
     const raw = await http.get(`/user/${targetId}`);
     user.value = normalizePublicUser(raw);
@@ -340,9 +353,24 @@ h2 {
 
 .counts {
   display: flex;
-  gap: 16px;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
   font-size: 13px;
   color: var(--kc-muted);
+}
+
+.count-link {
+  color: var(--kc-muted);
+  text-decoration: none;
+}
+
+.count-link:hover {
+  color: var(--el-color-primary);
+}
+
+.count-sep {
+  user-select: none;
 }
 
 .wrap {
