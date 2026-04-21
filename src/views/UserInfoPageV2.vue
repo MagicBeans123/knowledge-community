@@ -16,6 +16,7 @@
         <el-button v-if="profile.id != null" plain @click="goMyShops">我的店铺</el-button>
         <el-button v-if="profile.id != null" plain @click="goPublicView">他人视角</el-button>
         <el-button type="primary" @click="goEdit">修改资料</el-button>
+        <el-button v-if="profile.id != null" :loading="loggingOut" @click="handleLogout">登出</el-button>
       </div>
     </div>
 
@@ -89,8 +90,20 @@ const userStore = useUserStore();
 const router = useRouter();
 const defaultIcon = "/image/default.png";
 const profileReady = ref(false);
+const loggingOut = ref(false);
 
 const profile = computed(() => userStore.user || {});
+
+const handleLogout = async () => {
+  loggingOut.value = true;
+  try {
+    await userStore.logout();
+    ElMessage.success("已登出");
+    router.push("/login");
+  } finally {
+    loggingOut.value = false;
+  }
+};
 
 const goEdit = () => {
   router.push("/community/info-edit");

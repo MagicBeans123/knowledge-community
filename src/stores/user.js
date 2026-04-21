@@ -14,6 +14,19 @@ export const useUserStore = defineStore("user", {
       } catch (error) {
         this.user = null;
       }
+    },
+    /** 调用 POST /user/logout 后清除本地登录态；接口失败时仍清理客户端，避免卡在半登出状态 */
+    async logout() {
+      try {
+        await http.post("/user/logout");
+      } catch {
+        /* ignore：后端未实现或网络错误时仍执行本地清理 */
+      }
+      sessionStorage.removeItem("token");
+      this.user = null;
+      import("../services/stompService.js")
+        .then((m) => m.disconnect())
+        .catch(() => {});
     }
   }
 });
