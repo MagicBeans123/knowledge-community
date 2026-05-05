@@ -15,6 +15,7 @@
     <div class="actions">
       <el-button class="nav-btn" @click="toExplore">知识探索</el-button>
       <el-button class="nav-btn" @click="toShops">商户</el-button>
+      <el-button class="nav-btn" @click="toReadingHistory">阅读轨迹</el-button>
       <el-button class="nav-btn" @click="toInfo">个人中心</el-button>
       <el-button type="primary" class="nav-primary" @click="toPublish">发布帖子</el-button>
     </div>
@@ -37,6 +38,7 @@ const emitSearch = () => {
 const toHome = () => router.push("/community/explore");
 const toExplore = () => router.push("/community/explore");
 const toShops = () => router.push("/community/shops");
+const toReadingHistory = () => router.push("/community/graph/history");
 const toInfo = () => router.push("/community/info");
 const toPublish = () => router.push("/community/blog-edit");
 </script>

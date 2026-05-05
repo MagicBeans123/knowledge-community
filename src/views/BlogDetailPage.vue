@@ -1,5 +1,5 @@
 <template>
-  <div class="detail-page">
+  <div class="detail-page" :class="{ 'detail-page--with-graph': !!blog }">
     <section v-if="loadError" class="card panel error-panel">
       <p class="error-title">无法加载这篇博客</p>
       <p class="error-desc">{{ loadError }}</p>
@@ -11,7 +11,17 @@
         <el-skeleton animated :rows="6" />
       </section>
 
-      <section class="card panel" v-else-if="blog">
+      <section class="card panel panel-blog-reading" v-else-if="blog">
+        <div class="reading-grid">
+          <aside class="graph-aside">
+            <ReadingGraphPanel
+              :nodes="readingGraphNodes"
+              :edges="readingGraphEdges"
+              :selected-url="currentCanonicalUrl"
+              @node-click="onGraphNodeNavigate"
+            />
+          </aside>
+          <div class="reading-main">
         <div class="head">
           <el-button class="back-btn" text @click="router.back()">← 返回</el-button>
           <h1 class="title">{{ blog.title }}</h1>
@@ -57,7 +67,11 @@
         </div>
 
         <div v-if="contentLoadError" class="comments-hint">{{ contentLoadError }}</div>
-        <article class="article-body markdown-body" v-html="articleHtml"></article>
+        <article
+          class="article-body markdown-body"
+          v-html="articleHtml"
+          @click.capture="onMarkdownLinkClick"
+        ></article>
 
         <div v-if="attachmentFiles.length" class="attachments-block">
           <h3>附件下载</h3>
@@ -217,20 +231,41 @@
           <p v-else-if="!topLevelComments.length && topLoadingMore && !commentsError" class="load-more-c">评论加载中…</p>
           <p v-else-if="!commentsError && !topLevelComments.length" class="empty-c">暂无评论，来抢沙发吧</p>
         </div>
+          </div>
+        </div>
       </section>
     </template>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
 import http from "../api/http";
+import { postGraphEdge } from "../api/graph";
 import { useUserStore } from "../stores/user";
+import { useReadingGraphStore } from "../stores/readingGraph";
 import { normalizeBlogDetail, normalizeComment } from "../utils/dto";
 import { isLikelyHtmlContent, renderMarkdown } from "../utils/markdown";
+import {
+  canonicalPageUrl,
+  internalBlogRouterPath,
+  isInternalBlogDetailUrl,
+  parseBlogIdFromInternalUrl,
+  resolveMarkdownNavTarget
+} from "../utils/readingGraph";
+import {
+  consumeReadingGraphMarkdownNavigation,
+  consumeReadingGraphPanelNavigation,
+  consumeReadingGraphHistoryNavigation,
+  consumeReadingGraphPopNavigation,
+  markReadingGraphMarkdownNavigation,
+  markReadingGraphPanelNavigation,
+  readStaleReadingGraphNavigationFrom
+} from "../utils/readingGraphSession";
+import ReadingGraphPanel from "../components/ReadingGraphPanel.vue";
 
 const props = defineProps({
   id: {
@@ -248,9 +283,84 @@ const props = defineProps({
 const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
+const readingGraphStore = useReadingGraphStore();
+
+/** 当前正文页规范 URL，用于图高亮（随路由变化） */
+const currentCanonicalUrl = computed(() => {
+  if (typeof window === "undefined") return "";
+  const path = route.fullPath || "";
+  try {
+    return canonicalPageUrl(new URL(path.replace(/#$/, "") || "/", window.location.origin).href);
+  } catch {
+    return canonicalPageUrl(`${window.location.origin}${path.startsWith("/") ? path : `/${path}`}`);
+  }
+});
+
+const readingGraphNodes = computed(() => readingGraphStore.nodes);
+const readingGraphEdges = computed(() => readingGraphStore.edges);
+
+/** 后端创建根节点后返回的阅读历史 id；后续同会话 /graph/edge 均携带 */
+const readingGraphHistoryId = ref(null);
+
+function setReadingGraphHistoryIdFromResponse(data) {
+  if (data == null) return;
+  const obj = typeof data === "object" && !Array.isArray(data) ? data : {};
+  const v = obj.id ?? obj.historyId ?? (typeof data === "number" || typeof data === "string" ? data : null);
+  if (v == null || v === "") return;
+  /** 字符串保存 Long，避免 Number 超安全整数丢精度 */
+  readingGraphHistoryId.value = String(v).trim();
+}
+
+/** 侧栏图仅用于跳转，不记边；边只来自正文内 Markdown 链接点击（见 onMarkdownLinkClick） */
+const onGraphNodeNavigate = (url) => {
+  const toCanon = canonicalPageUrl(url);
+  if (!toCanon) return;
+
+  if (isInternalBlogDetailUrl(toCanon)) {
+    const path = internalBlogRouterPath(toCanon);
+    if (!path.includes("/community/blog/")) return;
+    markReadingGraphPanelNavigation();
+    router.push(path);
+    return;
+  }
+
+  window.open(toCanon, "_blank", "noopener,noreferrer");
+};
 const { user: me } = storeToRefs(userStore);
 
 const blog = ref(null);
+
+/** 拉取目标博客标题，供边与后端 `title`（to 侧）一致；失败返回 `""` */
+async function fetchTargetBlogTitleForEdge(canonicalToUrl) {
+  const bid = parseBlogIdFromInternalUrl(canonicalToUrl);
+  if (!bid) return "";
+  try {
+    const raw = await http.get(`/blog/${bid}`);
+    const n = normalizeBlogDetail(raw);
+    return String(n?.title ?? "").trim();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * POST 体：`from` → `to` 为实际跳转方向（仅做 canonical，不交换端点）。
+ * @param {string|null|undefined} titleForEdge **目标页（to）** 博文标题字符串；站外目标为 `null`
+ */
+function graphEdgePostBody(fromUrl, toUrl, titleForEdge) {
+  const from = canonicalPageUrl(fromUrl);
+  const to = canonicalPageUrl(toUrl);
+  if (!from || !to) return null;
+  const title =
+    titleForEdge === null ? null : String(titleForEdge ?? "").trim();
+  const body = { from, to, title };
+  const hid = readingGraphHistoryId.value;
+  if (hid != null && String(hid).trim() !== "") {
+    body.id = String(hid).trim();
+  }
+  return body;
+}
+
 const followedAuthor = ref(false);
 const followLoading = ref(false);
 /** 仅顶级评论（游标分页）；子回复仍在 repliesByParent */
@@ -277,7 +387,7 @@ const defaultIcon = "/image/default.png";
 const markdownSource = ref("");
 const contentLoadError = ref("");
 
-const blogId = props.id || route.params.id;
+const blogId = computed(() => String(props.id ?? route.params.id ?? "").trim());
 
 const articleHtml = computed(() => {
   const c = markdownSource.value;
@@ -319,6 +429,59 @@ const normalizeFetchedMarkdown = (text) => {
     return t.replace(/\\n/g, "\n");
   }
   return text;
+};
+
+/**
+ * Markdown 正文链接：站内 → SPA 跳转；站外 → 新标签。
+ * 阅读轨迹的边与 /graph/edge 仅在此处记录（侧栏图结点点击不记边）。
+ * 边上 `title` 与本地图为 **目标博客（to）** 标题。
+ */
+const onMarkdownLinkClick = async (e) => {
+  if (e.button != null && e.button !== 0) return;
+  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+
+  const a = e.target?.closest?.("a[href]");
+  if (!a) return;
+  if (a.closest(".attachments-block")) return;
+  const hrefAttr = a.getAttribute("href");
+  const target = resolveMarkdownNavTarget(
+    hrefAttr,
+    typeof window !== "undefined" ? window.location.href : ""
+  );
+  if (!target) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  const fromCanonical = canonicalPageUrl(window.location.href);
+  const toCanonical = target.canonical;
+
+  if (target.kind === "blog") {
+    markReadingGraphMarkdownNavigation();
+    let toTitle = await fetchTargetBlogTitleForEdge(toCanonical);
+    if (!toTitle) {
+      toTitle = String(a.textContent ?? "").replace(/\s+/g, " ").trim();
+    }
+    const body = graphEdgePostBody(fromCanonical, toCanonical, toTitle);
+    const added = readingGraphStore.addDirectedEdge(fromCanonical, toCanonical, toTitle);
+    router.push(internalBlogRouterPath(target.canonical));
+    if (added && body) {
+      queueMicrotask(() => {
+        postGraphEdge(body).catch(() => {});
+      });
+    }
+    return;
+  }
+
+  readingGraphStore.upsertNode(toCanonical, "", { external: true });
+  const body = graphEdgePostBody(fromCanonical, toCanonical, null);
+  const added = readingGraphStore.addDirectedEdge(fromCanonical, toCanonical, "");
+  window.open(target.openUrl, "_blank", "noopener,noreferrer");
+  if (added && body) {
+    queueMicrotask(() => {
+      postGraphEdge(body).catch(() => {});
+    });
+  }
 };
 
 const resolveContent = async (normalizedBlog) => {
@@ -443,7 +606,7 @@ const fetchTopCommentsPage = async (isInitial) => {
       /** 第一次 0，之后固定 1（与关注动态等接口一致） */
       offset: isInitial ? 0 : 1
     });
-    const data = await http.get(`/blog/${blogId}/comments?${q}`);
+    const data = await http.get(`/blog/${blogId.value}/comments?${q}`);
     const { list, nextSeconds } = parseCommentPagePayload(data);
     const mapped = list
       .map((item) => normalizeComment(item))
@@ -486,13 +649,62 @@ const onWindowScroll = () => {
 };
 
 const fetchBlog = async () => {
-  const raw = await http.get(`/blog/${blogId}`);
+  const id = blogId.value;
+  if (!id) throw new Error("无效的博客链接");
+  const raw = await http.get(`/blog/${id}`);
   const normalized = normalizeBlogDetail(raw);
   if (!normalized) {
     throw new Error("未找到该博客");
   }
   blog.value = normalized;
   await resolveContent(normalized);
+  if (typeof window !== "undefined") {
+    const pageUrl = canonicalPageUrl(window.location.href);
+    const t = String(normalized.title ?? "").trim();
+
+    const fromMarkdown = consumeReadingGraphMarkdownNavigation();
+    const fromPanel = consumeReadingGraphPanelNavigation();
+    const fromHistory = consumeReadingGraphHistoryNavigation();
+    const viaPop = consumeReadingGraphPopNavigation();
+    const { name: fromName, blogId: prevBlogId } = readStaleReadingGraphNavigationFrom();
+    const fromWasBlogDetail = fromName === "blog-detail";
+    const currentIdStr = String(blogId.value || "");
+    const blogIdChanged = Boolean(prevBlogId) && prevBlogId !== currentIdStr;
+
+    if (fromMarkdown || fromPanel || fromHistory) {
+      readingGraphStore.upsertNode(pageUrl, t);
+    } else if (!fromWasBlogDetail) {
+      readingGraphStore.reset();
+      readingGraphHistoryId.value = null;
+      readingGraphStore.upsertNode(pageUrl, t);
+      queueMicrotask(() =>
+        postGraphEdge({
+          from: null,
+          to: pageUrl,
+          title: t,
+          id: null
+        })
+          .then(setReadingGraphHistoryIdFromResponse)
+          .catch(() => {})
+      );
+    } else if (blogIdChanged && !viaPop) {
+      readingGraphStore.reset();
+      readingGraphHistoryId.value = null;
+      readingGraphStore.upsertNode(pageUrl, t);
+      queueMicrotask(() =>
+        postGraphEdge({
+          from: null,
+          to: pageUrl,
+          title: t,
+          id: null
+        })
+          .then(setReadingGraphHistoryIdFromResponse)
+          .catch(() => {})
+      );
+    } else {
+      readingGraphStore.upsertNode(pageUrl, t);
+    }
+  }
 };
 
 const fetchComments = async () => {
@@ -513,7 +725,7 @@ const fetchReplies = async (parentId) => {
   repliesLoadingByParent.value = { ...repliesLoadingByParent.value, [parentId]: true };
   try {
     const q = buildCommentQuery(parentId, "");
-    const data = await http.get(`/blog/${blogId}/comments?${q}`);
+    const data = await http.get(`/blog/${blogId.value}/comments?${q}`);
     const list = Array.isArray(data) ? data : [];
     repliesByParent.value = {
       ...repliesByParent.value,
@@ -574,7 +786,7 @@ const submitReply = async (parentRow) => {
   }
   replySubmittingByParent.value = { ...replySubmittingByParent.value, [parentId]: true };
   try {
-    await http.post(`/blog/${blogId}/comments`, {
+    await http.post(`/blog/${blogId.value}/comments`, {
       content: text,
       parentId,
       // 二级评论先挂在顶级评论下；不做 @ 逻辑时 answerId 传父评论 id 即可
@@ -601,7 +813,7 @@ const submitComment = async () => {
   }
   commentSubmitting.value = true;
   try {
-    await http.post(`/blog/${blogId}/comments`, {
+    await http.post(`/blog/${blogId.value}/comments`, {
       content: text,
       parentId: 0,
       answerId: null
@@ -657,7 +869,7 @@ const deleteCommentRow = async (row) => {
   if (!row?.id) return;
   commentDeletingId.value = row.id;
   try {
-    await http.delete(`/blog/${blogId}/comments/${row.id}`);
+    await http.delete(`/blog/${blogId.value}/comments/${row.id}`);
     removeCommentFromState(row);
     if (blog.value?.comments != null && blog.value.comments > 0) {
       blog.value.comments -= 1;
@@ -673,7 +885,7 @@ const deleteCommentRow = async (row) => {
 const toggleLike = async () => {
   likeLoading.value = true;
   try {
-    await http.put(`/blog/like/${blogId}`);
+    await http.put(`/blog/like/${blogId.value}`);
     const hadLiked = Boolean(blog.value?.isLike);
     if (!blog.value) blog.value = {};
     blog.value.isLike = !hadLiked;
@@ -687,7 +899,7 @@ const toggleLike = async () => {
 };
 
 const deleteBlog = async () => {
-  if (!blogId || !isBlogOwner.value) return;
+  if (!blogId.value || !isBlogOwner.value) return;
   try {
     await ElMessageBox.confirm("确定要删除这篇博客吗？删除后无法恢复。", "删除博客", {
       confirmButtonText: "删除",
@@ -700,7 +912,7 @@ const deleteBlog = async () => {
   }
   blogDeleting.value = true;
   try {
-    await http.delete(`/blog/${blogId}`);
+    await http.delete(`/blog/${blogId.value}`);
     ElMessage.success("博客已删除");
     const uid = blog.value?.userId;
     if (uid != null && uid !== "") {
@@ -744,6 +956,22 @@ const toggleFollowAuthor = async () => {
   }
 };
 
+watch(blogId, async (next, prev) => {
+  if (!next || next === prev) return;
+  loadError.value = "";
+  loading.value = true;
+  blog.value = null;
+  try {
+    await fetchBlog();
+    await loadAuthorFollow();
+    await fetchComments();
+  } catch (error) {
+    loadError.value = error.message || "请检查网络或稍后重试";
+  } finally {
+    loading.value = false;
+  }
+});
+
 onMounted(async () => {
   window.addEventListener("scroll", onWindowScroll, { passive: true });
   loadError.value = "";
@@ -769,6 +997,57 @@ onUnmounted(() => {
 .detail-page {
   max-width: 860px;
   margin: 0 auto;
+}
+
+.detail-page--with-graph {
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  width: 100vw;
+  max-width: 100vw;
+  padding-inline: clamp(8px, 1.25vw, 14px);
+  box-sizing: border-box;
+}
+
+.detail-page--with-graph .panel-blog-reading.panel {
+  padding: 12px clamp(6px, 1.25vw, 14px) 24px !important;
+  border-radius: 10px;
+  max-width: none;
+}
+
+.reading-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(0, 2.15fr);
+  gap: clamp(10px, 1.25vw, 18px);
+  align-items: start;
+  min-height: calc(100vh - 96px);
+}
+
+.graph-aside {
+  position: sticky;
+  top: 76px;
+  align-self: start;
+  max-height: calc(100vh - 88px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.reading-main {
+  min-width: 0;
+}
+
+@media (max-width: 960px) {
+  .reading-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .graph-aside {
+    position: relative;
+    top: auto;
+  }
 }
 
 .panel {

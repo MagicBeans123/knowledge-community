@@ -11,6 +11,15 @@
   --kc-subtle: #7a7d6a;
   --kc-shadow: 0 10px 28px rgba(58, 67, 44, 0.14);
   --kc-shadow-soft: 0 6px 20px rgba(58, 67, 44, 0.1);
+  --kc-shadow-lift: 0 12px 28px rgba(58, 67, 44, 0.12);
+  --kc-primary-rgb: 77, 92, 66;
+  --kc-primary-soft: rgba(var(--kc-primary-rgb), 0.1);
+  --kc-primary-soft-2: rgba(var(--kc-primary-rgb), 0.16);
+  --kc-hero-surface: linear-gradient(145deg, #fdfbf5 0%, #f5f1e6 42%, #eef0e6 100%);
+  --kc-ribbon: linear-gradient(90deg, #4d5c42 0%, #6b7d5c 40%, #b89a6a 100%);
+  --kc-metric-warm: linear-gradient(160deg, #fffdf9 0%, #f3eee4 100%);
+  --kc-metric-moss: linear-gradient(160deg, #f6f8f3 0%, #e8ebe3 100%);
+  --kc-metric-sand: linear-gradient(160deg, #faf6ee 0%, #efe8db 100%);
   /* 主色：橄榄绿灰，与米色背景协调（替代顶栏亮橙） */
   --el-color-primary: #4d5c42;
 }

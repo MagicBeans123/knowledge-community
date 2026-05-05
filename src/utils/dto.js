@@ -2,7 +2,7 @@
  * 与 database_structure 对应的 JSON 驼峰字段约定（后端序列化）。
  * know_blog: userId, title, content / markdownContent, liked, comments, isCommit, createTime, updateTime
  * know_user: phone, email, nickName, icon, sign, createTime, updateTime
- * know_user_info: city, introduce, fans, followee, gender, birthday, credits, level
+ * know_user_info: city, introduce, fans, followee, gender, birthday, credits, level（累计签到天数，前端用 checkInLevel.js 换算 1～6 级）
  * know_blog_comments: userId, blogId, parentId, answerId, content, liked, status, createTime
  */
 

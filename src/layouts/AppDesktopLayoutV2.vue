@@ -1,7 +1,7 @@
 <template>
   <div class="page-shell">
     <BaseTopNav2 @search-submit="onSearchSubmit" />
-    <div class="main-wrap">
+    <div class="main-wrap" :class="{ 'main-wrap--full': isFullWidthChild }">
       <router-view v-slot="{ Component }">
         <component :is="Component" :keyword="keyword" />
       </router-view>
@@ -10,11 +10,17 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
+import { useRoute } from "vue-router";
 import { ElNotification } from "element-plus";
 import BaseTopNav2 from "../components/BaseTopNav2.vue";
 
+const route = useRoute();
 const keyword = ref("");
+
+/** 个人中心等：主区域横向占满视口（仍保留左右内边距） */
+const isFullWidthChild = computed(() => route.name === "info");
+
 const onSearchSubmit = (value) => {
   keyword.value = value;
 };
@@ -73,6 +79,16 @@ onUnmounted(() => {
 .main-wrap {
   width: min(1320px, 96vw);
   margin: 20px auto 0;
+  padding-bottom: 32px;
+  box-sizing: border-box;
+}
+
+.main-wrap--full {
+  width: 100%;
+  max-width: none;
+  margin: 20px 0 0;
+  padding-left: clamp(14px, 3.2vw, 48px);
+  padding-right: clamp(14px, 3.2vw, 48px);
   padding-bottom: 32px;
 }
 </style>

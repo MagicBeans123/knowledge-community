@@ -18,8 +18,15 @@ import ShopEditPage from "./views/ShopEditPage.vue";
 import UserBlogsPage from "./views/UserBlogsPage.vue";
 import UserShopsPage from "./views/UserShopsPage.vue";
 import FollowListPage from "./views/FollowListPage.vue";
+import ReadingHistoryListPage from "./views/ReadingHistoryListPage.vue";
+import ReadingHistoryRedirect from "./views/ReadingHistoryRedirect.vue";
 import LoginPage from "./views/LoginPage.vue";
 import RegisterPage from "./views/RegisterPage.vue";
+import { useReadingGraphStore } from "./stores/readingGraph.js";
+import {
+  stashReadingGraphNavigationFrom,
+  syncReadingGraphPopNavigationFlag
+} from "./utils/readingGraphSession.js";
 
 const routes = [
   { path: "/", name: "landing", component: LandingPage },
@@ -43,6 +50,13 @@ const routes = [
       { path: "user/:userId/following", name: "user-following", component: FollowListPage, props: true },
       { path: "user/:userId/followers", name: "user-followers", component: FollowListPage, props: true },
       { path: "blog/:id", name: "blog-detail", component: BlogDetailPage, props: true },
+      { path: "graph/history", name: "graph-history", component: ReadingHistoryListPage },
+      {
+        path: "graph/history/:historyId",
+        name: "graph-history-detail",
+        component: ReadingHistoryRedirect,
+        props: true
+      },
       { path: "blog-edit", name: "blog-edit", component: BlogEditPageV2 },
       { path: "info", name: "info", component: UserInfoPageV2 },
       { path: "other-info/:id", name: "other-info", component: OtherInfoPage, props: true },
@@ -56,6 +70,22 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes
+});
+
+router.beforeEach((to, from) => {
+  syncReadingGraphPopNavigationFlag();
+  stashReadingGraphNavigationFrom(from);
+});
+
+/** 离开博文详情页时清空本地轨迹图（再进博文会重新 POST from:null） */
+router.afterEach((to) => {
+  if (to.name !== "blog-detail") {
+    try {
+      useReadingGraphStore().reset();
+    } catch {
+      /* Pinia 未就绪时跳过 */
+    }
+  }
 });
 
 export default router;
